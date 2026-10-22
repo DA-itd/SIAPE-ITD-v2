@@ -1,0 +1,25 @@
+# Dependencias y compilación
+node_modules/
+dist/
+
+# Llaves y variables de entorno (nunca se suben)
+.env
+.env.*
+!.env.example
+
+# Datos reales de alumnos y expedientes: NUNCA en Git
+/data/
+/scripts/
+*.csv
+*.xlsx
+*.xls
+seed_*.sql
+siape_itd_local_db.json
+psico.csv
+
+# Sistema
+.DS_Store
+.vercel/
+*.textClipping
+bun.lock
+bun.lockb

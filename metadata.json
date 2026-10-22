@@ -1,0 +1,6 @@
+{
+  "name": "SIAPE-ITD | Sistema Integral de Atención Psicológica Estudiantil",
+  "description": "Sistema institucional para la Oficina de Psicología adscrita a Desarrollo Académico del Instituto Tecnológico de Durango (ITD): gestión de evaluaciones psicométricas (BAI/BDI), semáforo operativo de prioridad, expediente psicológico único, seguimiento clínico, tutorías académicas y arquitectura Supabase PostgreSQL con RLS.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
