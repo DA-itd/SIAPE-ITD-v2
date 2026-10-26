@@ -1,20 +1,26 @@
 import React, { useMemo, useState } from 'react';
 import {
-  Activity,
   AlertTriangle,
-  BookOpen,
+  ArrowLeft,
+  Calendar,
   CheckCircle2,
-  ClipboardList,
-  Compass,
-  FileCheck2,
-  Sparkles,
+  ClipboardPlus,
+  FileText,
+  History,
+  Lock,
+  Plus,
+  Printer,
+  Send,
+  ShieldAlert,
   TrendingDown,
-  TrendingUp,
   UserCheck,
 } from 'lucide-react';
 import {
   AssessmentRecord,
   AssessmentStatus,
+  AttentionModality,
+  AuditLogEntry,
+  CaseFollowUpState,
   ClinicalCaseRecord,
   FollowUpTask,
   InstrumentCode,
@@ -25,6 +31,11 @@ import {
   StudentRecord,
   UserProfile,
 } from '../types/siape';
+import {
+  checkRlsAccessPermission,
+  evaluateInstrumentDeterministically,
+} from '../lib/scoringEngine';
+import ClinicalDecisionSupportBlueprint from './ClinicalDecisionSupportBlueprint';
 
 interface ClinicalDecisionSupportBlueprintProps {
   currentUser: UserProfile;
