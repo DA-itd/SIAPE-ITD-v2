@@ -826,8 +826,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
   };
 
   // Envío de autoevaluación por el Estudiante autenticado
-  // Eliminado: antes fabricaba respuestas a partir de un puntaje (simulador). Con datos reales
-  // las respuestas siempre las captura el alumno en su portal.
   const handleStudentSubmitSelfAssessment = () => {};
 
   // Filtrado RLS estricto conforme a la jerarquía de tres niveles + alumnos
@@ -900,31 +898,31 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     (currentUser.role === RoleCode.ESTUDIANTE ? 'Portal del Estudiante' : 'Panel Principal');
 
   return (
-    <div className="min-h-screen flex bg-[#F8FAFC] text-[#0F172A]">
+    <div className="min-h-screen flex bg-[#FDFBF7] text-[#3B4A3F]">
       {/* SIDEBAR INSTITUCIONAL ITD (264px en escritorio) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 bg-[#0F172A] text-slate-100 flex flex-col justify-between transition-transform lg:static lg:translate-x-0 no-print ${
+        className={`fixed inset-y-0 left-0 z-40 w-64 bg-[#F4F0E6] text-[#3B4A3F] flex flex-col justify-between transition-transform lg:static lg:translate-x-0 no-print border-r border-[#E8E2D5] ${
           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         <div>
           {/* Identidad Institucional ITD */}
-          <div className="px-5 py-5 border-b border-slate-800 bg-[#6D1B30]">
+          <div className="px-5 py-5 border-b border-[#E8E2D5] bg-[#A3C9A8]">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-base font-bold tracking-tight text-white font-display">
+                <div className="text-base font-bold tracking-tight text-[#2F3E32] font-display">
                   SIAPE-ITD
                 </div>
-                <div className="text-[11px] text-rose-100/90 mt-0.5">
+                <div className="text-[11px] text-[#4A6B53] mt-0.5 font-medium">
                   Oficina de Psicología · Desarrollo Académico
                 </div>
-                <div className="text-[10px] text-rose-200/80 font-mono mt-0.5">
+                <div className="text-[10px] text-[#4A6B53]/80 font-mono mt-0.5">
                   Instituto Tecnológico de Durango
                 </div>
               </div>
               <button
                 onClick={() => setMobileMenuOpen(false)}
-                className="lg:hidden text-white p-1"
+                className="lg:hidden text-[#2F3E32] p-1"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -943,10 +941,10 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
                     setActiveView(item.id);
                     setMobileMenuOpen(false);
                   }}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-medium transition-colors cursor-pointer text-left ${
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors cursor-pointer text-left ${
                     isActive
-                      ? 'bg-[#7C1D36] text-white font-semibold'
-                      : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                      ? 'bg-[#A3C9A8] text-[#2F3E32] font-bold shadow-sm'
+                      : 'text-[#4A6B53] hover:bg-[#E8E2D5] hover:text-[#2F3E32]'
                   }`}
                 >
                   <Icon className="w-4 h-4 shrink-0" />
@@ -958,9 +956,9 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
         </div>
 
         {/* Estado Institucional */}
-        <div className="p-4 border-t border-slate-800 text-[11px] text-slate-400 space-y-2">
-          <div className="font-semibold text-slate-200 flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+        <div className="p-4 border-t border-[#E8E2D5] text-[11px] text-[#4A6B53] space-y-2">
+          <div className="font-semibold text-[#2F3E32] flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-[#4A6B53] shrink-0" />
             <span>
               {isSupabaseConfigured
                 ? 'Supabase (Conectado)'
@@ -976,7 +974,7 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
               ? `Vista autorizada: ${authorizedCases.length} pacientes asignados a tu equipo clínico.`
               : `Vista de practicante: ${authorizedCases.length} pacientes bajo tu atención directa.`}
           </p>
-          <div className="pt-1.5 border-t border-slate-800/80 text-[10px] text-slate-500">
+          <div className="pt-1.5 border-t border-[#E8E2D5] text-[10px] text-[#4A6B53]/70">
             Oficina de Psicología · Instituto Tecnológico de Durango
           </div>
         </div>
@@ -985,53 +983,53 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
       {/* CONTENEDOR PRINCIPAL */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* TOP HEADER CON CONTROL DE AUTENTICACIÓN GOOGLE / GMAIL */}
-        <header className="bg-white border-b border-slate-200 px-6 py-3.5 flex items-center justify-between gap-4 no-print">
+        <header className="bg-white border-b border-[#E8E2D5] px-6 py-3.5 flex items-center justify-between gap-4 no-print">
           {/* Zona 1: Breadcrumb contextual */}
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setMobileMenuOpen(true)}
-              className="lg:hidden p-1.5 border border-slate-200 rounded-lg text-slate-700"
+              className="lg:hidden p-1.5 border border-[#E8E2D5] rounded-lg text-[#4A6B53]"
             >
               <Menu className="w-4 h-4" />
             </button>
-            <div className="text-sm font-bold text-slate-900 whitespace-nowrap truncate">
-              SIAPE-ITD <span className="text-slate-400 font-normal mx-1.5">/</span>{' '}
-              <span className="text-[#7C1D36]">{currentViewLabel}</span>
+            <div className="text-sm font-bold text-[#2F3E32] whitespace-nowrap truncate">
+              SIAPE-ITD <span className="text-[#A3C9A8] font-normal mx-1.5">/</span>{' '}
+              <span className="text-[#4A6B53]">{currentViewLabel}</span>
             </div>
           </div>
 
           {/* Zona 2 y 3: Identidad de Sesión y Acceso Google */}
           <div className="flex items-center gap-3 text-xs">
             {/* Distintivo de Nivel Jerárquico */}
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs">
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-[#E8E2D5] bg-[#FDFBF7] text-xs">
               {currentUser.role === RoleCode.ADMINISTRADOR && (
-                <span className="font-bold text-purple-900 bg-purple-100 px-2 py-0.5 rounded text-[11px] flex items-center gap-1">
+                <span className="font-bold text-purple-900 bg-purple-100 px-2 py-0.5 rounded-md text-[11px] flex items-center gap-1">
                   👑 Nivel 1: Superadmin
                 </span>
               )}
               {currentUser.role === RoleCode.PSICOLOGO && (
-                <span className="font-bold text-blue-900 bg-blue-100 px-2 py-0.5 rounded text-[11px] flex items-center gap-1">
+                <span className="font-bold text-blue-900 bg-blue-100 px-2 py-0.5 rounded-md text-[11px] flex items-center gap-1">
                   🩺 Nivel 2: Psicólogo Titular
                 </span>
               )}
               {currentUser.role === RoleCode.PRACTICANTE && (
-                <span className="font-bold text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded text-[11px] flex items-center gap-1">
+                <span className="font-bold text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded-md text-[11px] flex items-center gap-1">
                   🌱 Nivel 3: Practicante
                 </span>
               )}
               {currentUser.role === RoleCode.ESTUDIANTE && (
-                <span className="font-bold text-amber-900 bg-amber-100 px-2 py-0.5 rounded text-[11px] flex items-center gap-1">
+                <span className="font-bold text-amber-900 bg-amber-100 px-2 py-0.5 rounded-md text-[11px] flex items-center gap-1">
                   🎓 Alumno ITD
                 </span>
               )}
-              <span className="font-medium text-slate-800 truncate max-w-[150px]">
+              <span className="font-medium text-[#2F3E32] truncate max-w-[150px]">
                 {currentUser.fullName}
               </span>
             </div>
 
             <button
               onClick={onSignOut}
-              className="px-3.5 py-2 bg-white border border-slate-300 hover:bg-slate-50 hover:border-slate-400 text-slate-800 text-xs font-bold rounded-xl inline-flex items-center gap-2 cursor-pointer transition-all"
+              className="px-3.5 py-2 bg-white border border-[#E8E2D5] hover:bg-[#F4F0E6] text-[#4A6B53] text-xs font-bold rounded-xl inline-flex items-center gap-2 cursor-pointer transition-all"
             >
               <Lock className="w-3.5 h-3.5" />
               Cerrar sesión
@@ -1040,39 +1038,39 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
         </header>
 
         {/* CINTILLO CONTEXTUAL DE PERMISOS */}
-        <div className="bg-slate-100 border-b border-slate-200 px-6 py-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-700 no-print">
+        <div className="bg-[#F4F0E6] border-b border-[#E8E2D5] px-6 py-2 flex flex-wrap items-center justify-between gap-2 text-xs text-[#4A6B53] no-print">
           <div>
             Sesión activa: <strong>{currentUser.fullName}</strong> ({currentUser.email}) ·
             {currentUser.role === RoleCode.ADMINISTRADOR && (
-              <span className="text-purple-900 ml-1 font-semibold">
+              <span className="text-[#2F3E32] ml-1 font-semibold">
                 Superadministrador: Da de alta psicólogos y supervisa el sistema completo.
               </span>
             )}
             {currentUser.role === RoleCode.PSICOLOGO && (
-              <span className="text-blue-900 ml-1 font-semibold">
+              <span className="text-[#2F3E32] ml-1 font-semibold">
                 Psicólogo Titular: Ve sus pacientes + pacientes de sus practicantes a cargo.
               </span>
             )}
             {currentUser.role === RoleCode.PRACTICANTE && (
-              <span className="text-emerald-900 ml-1 font-semibold">
+              <span className="text-[#2F3E32] ml-1 font-semibold">
                 Practicante: Supervisado por {currentUser.supervisorName || 'Psicólogo Titular'} (solo ve sus pacientes asignados).
               </span>
             )}
             {currentUser.role === RoleCode.ESTUDIANTE && (
-              <span className="text-amber-900 ml-1 font-semibold">
+              <span className="text-[#2F3E32] ml-1 font-semibold">
                 Alumno ITD: Acceso exclusivo a completar sus datos personales y responder cuestionarios.
               </span>
             )}
           </div>
-          <span className="text-[11px] font-semibold text-amber-900 bg-amber-100 px-2 py-0.5 rounded">
-            Etapa 1: expedientes, evaluaciones y sesiones aún no se guardan en la base. No captures datos clínicos reales hasta completar la Etapa 2.
+          <span className="text-[11px] font-semibold text-[#4A6B53] bg-[#A3C9A8]/30 px-2 py-0.5 rounded-md border border-[#A3C9A8]/50">
+            Etapa 1: expedientes, evaluaciones y sesiones aún no se guardan en la base.
           </span>
         </div>
 
         {/* ÁREA DE CONTENIDO PRINCIPAL */}
-        <main className="flex-1 p-6 max-w-[1440px] w-full mx-auto">
+        <main className="flex-1 p-6 max-w-[1440px] w-full mx-auto bg-[#FDFBF7]">
           {dataLoading ? (
-            <div className="p-6 text-sm text-slate-600">Cargando información…</div>
+            <div className="p-6 text-sm text-[#4A6B53]">Cargando información…</div>
           ) : dataError ? (
             <div className="p-4 rounded-xl border border-rose-200 bg-rose-50 text-sm text-rose-900">
               {dataError}
@@ -1211,7 +1209,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
           )}
         </main>
       </div>
-
     </div>
   );
 }

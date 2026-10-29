@@ -9,13 +9,14 @@
 
   body {
     font-family: var(--font-sans);
-    color: #0F172A;
-    background-color: #F8FAFC;
+    color: #3B4A3F; /* Texto principal: verde muy oscuro/grisáceo */
+    background-color: #FDFBF7; /* Fondo Crema suave */
   }
 
   h1, h2, h3, h4, .font-display {
     font-family: var(--font-display);
     text-wrap: balance;
+    color: #2F3E32; /* Títulos en verde profundo */
   }
 
   .font-mono, .tabular-nums {
@@ -36,4 +37,3 @@
     display: block !important;
   }
 }
-
