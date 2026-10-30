@@ -63,6 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setErrorMessage('Faltan VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en el entorno.');
       return;
     }
+    
     if (!session?.user) {
       setProfile(null);
       setBlockedEmail(null);
@@ -71,30 +72,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-       
-         const { data: newProfile, error: createError } = await supabase
-             .from('profiles')
-             .insert({
-               auth_user_id: session.user.id,
-               email: email,
-               full_name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || 'Alumno ITD',
-               role_code: RoleCode.ESTUDIANTE,
-              account_status: 'ACTIVA',
-              })
-             .select(PROFILE_SELECT)
-             .single();
+      const email = (session.user.email ?? '').toLowerCase();
 
-             if (createError) {
-             // Vamos a imprimir el error real para saber qué pasa
-             console.error("Error exacto de Supabase al crear perfil:", createError);
-             throw new Error(`No se pudo crear el perfil: ${createError.message}`);
-            }
-           scurrentProfile = newProfile;
-        const email = (session.user.email ?? '').toLowerCase();
+      // 1. Buscar si el perfil ya existe
+      const { data: existingProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select(PROFILE_SELECT)
+        .eq('auth_user_id', session.user.id)
+        .maybeSingle();
+
+      if (profileError) throw profileError;
+
+      let currentProfile = existingProfile;
+
+      // 2. Si no existe el perfil, lo creamos (Auto-registro)
+      if (!currentProfile) {
         const isStudentDomain = email.endsWith('@itdurango.edu.mx') || email.endsWith('@gmail.com');
 
         if (isStudentDomain) {
-          // 1. Crear perfil de alumno
           const { data: newProfile, error: createError } = await supabase
             .from('profiles')
             .insert({
@@ -109,7 +104,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           if (createError) {
             console.error("Error creando perfil de alumno:", createError);
-            throw new Error("No se pudo crear el perfil del alumno. Avisa al administrador.");
+            throw new Error(`No se pudo crear el perfil del alumno: ${createError.message}`);
           }
           currentProfile = newProfile;
         } else {
@@ -122,8 +117,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
+      // 3. Validar que la cuenta esté activa
       const mapped = mapProfileRow(currentProfile);
-      const email = (session.user.email ?? mapped.email).toLowerCase();
 
       if (mapped.status === 'SUSPENDIDA' || mapped.status === 'REVOCADA') {
         setBlockedEmail(email);
@@ -145,8 +140,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setBlockedEmail(null);
       setBlockedReason(null);
       setStatus('READY');
+
     } catch (err: any) {
-      console.error(err);
+      console.error("Error en AuthContext:", err);
       setErrorMessage(err?.message || 'Error desconocido al validar la sesión.');
       setStatus('ERROR');
     }
@@ -158,12 +154,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setErrorMessage('Faltan VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en el entorno.');
       return;
     }
+    
     supabase.auth.getSession().then(({ data }) => resolveSession(data.session));
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'INITIAL_SESSION') return;
       setTimeout(() => resolveSession(session), 0);
     });
+    
     return () => listener.subscription.unsubscribe();
   }, [resolveSession]);
 
