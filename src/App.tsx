@@ -349,8 +349,18 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
   if (isStudentView) {
     const targetStudent = currentUser.role === RoleCode.ESTUDIANTE ? currentStudent : simulationStudent;
     const targetCase = currentUser.role === RoleCode.ESTUDIANTE ? currentStudentCase : simulationStudentCase;
-    if (!targetStudent) return <div className="p-10 text-center text-[#4A6B53]">Cargando datos del alumno...</div>;
-
+        if (!targetStudent) {
+      return (
+        <div className="p-10 text-center flex flex-col items-center justify-center min-h-[50vh]">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4A6B53] mb-4"></div>
+          <p className="text-[#4A6B53] font-bold">Sincronizando tus datos...</p>
+          <p className="text-xs text-gray-500 mt-2">Si este mensaje no desaparece en 10 segundos, cierra sesión y vuelve a entrar.</p>
+          <button onClick={onSignOut} className="mt-4 px-4 py-2 bg-white border border-[#E8E2D5] rounded-lg text-sm text-[#4A6B53] font-bold hover:bg-gray-50">
+            Cerrar Sesión
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen bg-[#FDFBF7]">
         {viewAsStudentMode && (
