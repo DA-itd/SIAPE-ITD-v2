@@ -119,11 +119,28 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     return () => { active = false; };
   }, [loadDirectory]);
 
-       const persistStudentRecord = async (s: StudentRecord): Promise<boolean> => {
+        const persistStudentRecord = async (s: StudentRecord): Promise<boolean> => {
         if (!supabase) return false;
     
-        let formattedBirthDate = null;
-        if (s.birthDate) {
+        // 1. Si el ID es el temporal, buscamos el ID real en la base de datos
+         let targetId = s.id;
+        if (targetId === 'temp-student-id' || !targetId) {
+        const { data: realStudent, error: findError } = await supabase
+        .from('students')
+        .select('id')
+        .eq('institutional_email', s.institutionalEmail.toLowerCase())
+        .maybeSingle();
+        
+      if (findError || !realStudent) {
+        console.error("No se encontró al alumno en la base de datos para actualizar.");
+        throw new Error("Tu registro aún se está creando. Espera unos segundos y vuelve a intentar guardar.");
+      }
+      targetId = realStudent.id;
+    }
+
+    // 2. Formatear la fecha
+    let formattedBirthDate = null;
+    if (s.birthDate) {
       if (/^\d{2}\/\d{2}\/\d{4}$/.test(s.birthDate)) {
         const [day, month, year] = s.birthDate.split('/');
         formattedBirthDate = `${year}-${month}-${day}`;
@@ -132,6 +149,7 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
       }
     }
 
+    // 3. Preparar los datos
     const patch: Record<string, unknown> = {
       full_name: s.fullName,
       matricula: s.matricula,
@@ -148,7 +166,8 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     };
     if (formattedBirthDate) patch.birth_date = formattedBirthDate;
 
-    const { data, error } = await supabase.from('students').update(patch).eq('id', s.id).select('id');
+    // 4. Actualizar usando el ID REAL
+    const { data, error } = await supabase.from('students').update(patch).eq('id', targetId).select('id');
     
     if (error || !data?.length) {
       console.error("Error al guardar ficha:", error);
