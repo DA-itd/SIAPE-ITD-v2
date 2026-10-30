@@ -366,24 +366,23 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
               if (!(await persistStudentRecord(updated))) return;
               setStudents((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
             }}
-                        onSubmitAssessment={(instrumentCode, responses) => {
-              // Si no hay expediente, usamos un ID temporal para que se guarde la evaluación
-              // y el psicólogo pueda vincularla después.
-              const caseId = targetCase ? targetCase.id : `temp-case-${targetStudent.id}`;
-              
-              handleCreateConsultationAssessment({
-                clinicalCaseId: caseId,
-                studentId: targetStudent.id,
-                instrumentCode,
-                applicationContextNote: `Cuestionario autoadministrado`,
-                responses,
-                professionalInterpretation: '',
-                overridePriority: null,
-                overrideReason: '',
-                nextFollowUpAction: 'Revisión inicial',
-                nextFollowUpDate: new Date().toISOString().slice(0, 10),
-              });
-            }}
+            onSubmitAssessment={(instrumentCode, responses) => {
+  // Si no hay expediente, creamos un ID temporal para no romper el flujo
+  const caseId = targetCase ? targetCase.id : `temp-case-${targetStudent.id}`;
+  
+  handleCreateConsultationAssessment({
+    clinicalCaseId: caseId,
+    studentId: targetStudent.id,
+    instrumentCode,
+    applicationContextNote: `Cuestionario autoadministrado`,
+    responses,
+    professionalInterpretation: '',
+    overridePriority: null,
+    overrideReason: '',
+    nextFollowUpAction: 'Revisión inicial',
+    nextFollowUpDate: new Date().toISOString().slice(0, 10),
+  });
+}}
             onLogoutOrSwitchRole={onSignOut}
           />
         </main>
