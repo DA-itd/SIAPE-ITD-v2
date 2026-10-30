@@ -119,26 +119,10 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     return () => { active = false; };
   }, [loadDirectory]);
 
-        const persistStudentRecord = async (s: StudentRecord): Promise<boolean> => {
-        if (!supabase) return false;
+          const persistStudentRecord = async (s: StudentRecord): Promise<boolean> => {
+    if (!supabase) return false;
     
-        // 1. Si el ID es el temporal, buscamos el ID real en la base de datos
-         let targetId = s.id;
-        if (targetId === 'temp-student-id' || !targetId) {
-        const { data: realStudent, error: findError } = await supabase
-        .from('students')
-        .select('id')
-        .eq('institutional_email', s.institutionalEmail.toLowerCase())
-        .maybeSingle();
-        
-      if (findError || !realStudent) {
-        console.error("No se encontró al alumno en la base de datos para actualizar.");
-        throw new Error("Tu registro aún se está creando. Espera unos segundos y vuelve a intentar guardar.");
-      }
-      targetId = realStudent.id;
-    }
-
-    // 2. Formatear la fecha
+    // Formatear la fecha
     let formattedBirthDate = null;
     if (s.birthDate) {
       if (/^\d{2}\/\d{2}\/\d{4}$/.test(s.birthDate)) {
@@ -149,11 +133,10 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
       }
     }
 
-    // 3. Preparar los datos
+    // Preparar los datos
     const patch: Record<string, unknown> = {
       full_name: s.fullName,
       matricula: s.matricula,
-      institutional_email: s.institutionalEmail,
       program_name: s.programName || 'Sin asignar',
       semester: s.semester > 0 ? s.semester : null,
       group_code: s.group || null,
@@ -166,13 +149,23 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     };
     if (formattedBirthDate) patch.birth_date = formattedBirthDate;
 
-    // 4. Actualizar usando el ID REAL
-    const { data, error } = await supabase.from('students').update(patch).eq('id', targetId).select('id');
+    // ACTUALIZACIÓN DIRECTA POR CORREO ELECTRÓNICO
+    // (Esto evita el problema del ID temporal)
+    const { data, error } = await supabase
+      .from('students')
+      .update(patch)
+      .eq('institutional_email', s.institutionalEmail.toLowerCase())
+      .select('id');
     
-    if (error || !data?.length) {
+    if (error) {
       console.error("Error al guardar ficha:", error);
-      throw new Error(error?.message || 'No se pudo guardar en la base de datos');
+      throw new Error(error.message || 'No se pudo guardar en la base de datos');
     }
+
+    if (!data || data.length === 0) {
+      throw new Error("No se encontró el registro del alumno para actualizar.");
+    }
+
     return true;
   };
 
