@@ -116,17 +116,14 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   const baiAnsweredCount = Object.keys(baiResponses).length;
   const bdiAnsweredCount = Object.keys(bdiResponses).length;
 
-  const handleSavePersonalData = async (e: React.FormEvent) => {
+    const handleSavePersonalData = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isDataLocked) return;
-    try {
-      setFormError(null);
-      await onUpdateStudentRecord(formData);
-      setSavedPersonalDataBanner(true);
-      setTimeout(() => setSavedPersonalDataBanner(false), 5000);
-    } catch (err: any) {
-      setFormError('Hubo un problema al guardar. Revisa tu conexión.');
-    }
+    
+    setFormError(null);
+    await onUpdateStudentRecord(formData); // Si falla, lanza error y no muestra el banner
+    setSavedPersonalDataBanner(true);
+    setTimeout(() => setSavedPersonalDataBanner(false), 5000);
   };
 
   const handleSendAssessment = (inst: InstrumentCode) => {
