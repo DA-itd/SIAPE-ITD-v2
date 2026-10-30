@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   BookOpen,
   CheckCircle2,
@@ -44,11 +44,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   onSubmitAssessment,
   onLogoutOrSwitchRole,
 }) => {
-  const [activeTab, setActiveTab] = useState<'FICHA_DATOS' | 'BAI' | 'BDI' | 'ESTADO'>(
-    'FICHA_DATOS'
-  );
-
-  // Lógica para saber si el alumno ya completó sus datos (para bloquear edición futura)
+  // Lógica para saber si el alumno ya completó sus datos
   const isDataLocked = useMemo(() => {
     return Boolean(
       student.fullName?.trim() &&
@@ -63,6 +59,20 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       student.gender
     );
   }, [student]);
+
+  // Si los datos ya están bloqueados, iniciamos directamente en el Cuestionario 1 (BAI).
+  // Si no, iniciamos en la Ficha de Datos.
+  const [activeTab, setActiveTab] = useState<'FICHA_DATOS' | 'BAI' | 'BDI' | 'ESTADO'>(
+    isDataLocked ? 'BAI' : 'FICHA_DATOS'
+  );
+
+  // Efecto por si el alumno llena los datos mientras está en la pantalla, 
+  // al guardar, la pestaña desaparezca y lo mande a los cuestionarios.
+  useEffect(() => {
+    if (isDataLocked && activeTab === 'FICHA_DATOS') {
+      setActiveTab('BAI');
+    }
+  }, [isDataLocked, activeTab]);
 
   // Formulario editable de datos personales y psicopedagógicos del alumno
   const [formData, setFormData] = useState<StudentRecord>({ ...student });
@@ -128,7 +138,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
-      {/* ENCABEZADO INSTITUCIONAL PARA EL ESTUDIANTE - AHORA EN VERDE PASTEL */}
+      {/* ENCABEZADO INSTITUCIONAL PARA EL ESTUDIANTE */}
       <div className="bg-white border border-[#E8E2D5] rounded-2xl shadow-sm overflow-hidden">
         <div className="bg-[#A3C9A8] text-[#2F3E32] p-6 sm:p-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -163,7 +173,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
           <div className="flex items-center gap-2">
             <Lock className="w-4 h-4 text-[#4A6B53] shrink-0" />
             <span>
-              <strong>Confidencialidad Garantizada:</strong> Tus respuestas solo son accesibles por la Oficina de Psicología del ITD. Ningún compañero ni docente tiene acceso a tus evaluaciones.
+              <strong>Confidencialidad Garantizada:</strong> Tus respuestas solo son accesibles por la Oficina de Psicología del ITD.
             </span>
           </div>
           {onLogoutOrSwitchRole && (
@@ -179,17 +189,22 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
         {/* NAVEGACIÓN DE PESTAÑAS DEL ESTUDIANTE */}
         <div className="flex border-b border-[#E8E2D5] bg-[#FDFBF7] p-2 gap-2 overflow-x-auto text-xs">
-          <button
-            onClick={() => setActiveTab('FICHA_DATOS')}
-            className={`px-4 py-2.5 rounded-xl font-bold cursor-pointer transition-colors inline-flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'FICHA_DATOS'
-                ? 'bg-[#4A6B53] text-white shadow-sm'
-                : 'text-[#4A6B53] hover:bg-[#E8E2D5]'
-            }`}
-          >
-            <User className="w-4 h-4" />
-            1. Mi Ficha de Datos Personales
-          </button>
+          
+          {/* PESTAÑA 1: SOLO SE MUESTRA SI LOS DATOS AÚN NO ESTÁN BLOQUEADOS */}
+          {!isDataLocked && (
+            <button
+              onClick={() => setActiveTab('FICHA_DATOS')}
+              className={`px-4 py-2.5 rounded-xl font-bold cursor-pointer transition-colors inline-flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'FICHA_DATOS'
+                  ? 'bg-[#4A6B53] text-white shadow-sm'
+                  : 'text-[#4A6B53] hover:bg-[#E8E2D5]'
+              }`}
+            >
+              <User className="w-4 h-4" />
+              1. Mi Ficha de Datos Personales
+            </button>
+          )}
+
           <button
             onClick={() => setActiveTab('BAI')}
             className={`px-4 py-2.5 rounded-xl font-bold cursor-pointer transition-colors inline-flex items-center gap-2 whitespace-nowrap ${
@@ -199,7 +214,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             }`}
           >
             <ClipboardCheck className="w-4 h-4" />
-            2. Cuestionario 1 (Sensaciones Físicas y Nerviosismo)
+            {isDataLocked ? '1.' : '2.'} Cuestionario 1 (Sensaciones Físicas y Nerviosismo)
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
                 baiExisting || baiAnsweredCount === 21
@@ -210,6 +225,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               {baiExisting || baiAnsweredCount === 21 ? 'Completado' : `${baiAnsweredCount}/21`}
             </span>
           </button>
+          
           <button
             onClick={() => setActiveTab('BDI')}
             className={`px-4 py-2.5 rounded-xl font-bold cursor-pointer transition-colors inline-flex items-center gap-2 whitespace-nowrap ${
@@ -219,7 +235,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             }`}
           >
             <FileText className="w-4 h-4" />
-            3. Cuestionario 2 (Estado de Ánimo y Pensamientos)
+            {isDataLocked ? '2.' : '3.'} Cuestionario 2 (Estado de Ánimo y Pensamientos)
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
                 bdiExisting || bdiAnsweredCount === 21
@@ -230,6 +246,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               {bdiExisting || bdiAnsweredCount === 21 ? 'Completado' : `${bdiAnsweredCount}/21`}
             </span>
           </button>
+          
           <button
             onClick={() => setActiveTab('ESTADO')}
             className={`px-4 py-2.5 rounded-xl font-bold cursor-pointer transition-colors inline-flex items-center gap-2 whitespace-nowrap ${
@@ -239,13 +256,13 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             }`}
           >
             <CheckCircle2 className="w-4 h-4" />
-            4. Estado de Mis Evaluaciones
+            {isDataLocked ? '3.' : '4.'} Estado de Mis Evaluaciones
           </button>
         </div>
       </div>
 
-      {/* PESTAÑA 1: FICHA DE DATOS PERSONALES */}
-      {activeTab === 'FICHA_DATOS' && (
+      {/* PESTAÑA 1: FICHA DE DATOS PERSONALES (Solo se renderiza si no está bloqueada) */}
+      {!isDataLocked && activeTab === 'FICHA_DATOS' && (
         <form onSubmit={handleSavePersonalData} className="bg-white border border-[#E8E2D5] rounded-2xl p-6 sm:p-8 space-y-6">
           <div className="border-b border-[#E8E2D5] pb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
@@ -254,42 +271,29 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                 Ficha de Datos Personales y Psicopedagógicos
               </h2>
               <p className="text-xs text-[#4A6B53] mt-1">
-                {isDataLocked 
-                  ? 'Tus datos ya han sido registrados y verificados. Si necesitas corregir algo, contacta a la Oficina de Psicología.' 
-                  : 'Completa y verifica tu información para que la Oficina de Psicología pueda brindarte el acompañamiento adecuado durante tu estancia en el ITD.'}
+                Completa y verifica tu información para que la Oficina de Psicología pueda brindarte el acompañamiento adecuado durante tu estancia en el ITD.
               </p>
             </div>
-            {!isDataLocked && (
-              <button
-                type="submit"
-                className="px-4 py-2 text-xs font-bold text-white bg-[#4A6B53] hover:bg-[#3B5743] rounded-xl shadow-sm cursor-pointer inline-flex items-center gap-2 self-start sm:self-auto"
-              >
-                <Save className="w-4 h-4" />
-                Guardar Mi Ficha
-              </button>
-            )}
+            <button
+              type="submit"
+              className="px-4 py-2 text-xs font-bold text-white bg-[#4A6B53] hover:bg-[#3B5743] rounded-xl shadow-sm cursor-pointer inline-flex items-center gap-2 self-start sm:self-auto"
+            >
+              <Save className="w-4 h-4" />
+              Guardar Mi Ficha
+            </button>
           </div>
 
           {savedPersonalDataBanner && (
             <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center gap-3 text-xs text-emerald-900">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
               <div>
-                <strong>¡Datos guardados con éxito!</strong> Tu ficha ha sido actualizada en el sistema institucional.
-              </div>
-            </div>
-          )}
-
-          {isDataLocked && (
-            <div className="p-4 bg-[#F4F0E6] border border-[#E8E2D5] rounded-xl flex items-center gap-3 text-xs text-[#4A6B53]">
-              <Lock className="w-5 h-5 text-[#4A6B53] shrink-0" />
-              <div>
-                <strong>Modo de solo lectura:</strong> Tus datos de identificación y contacto ya fueron guardados y no pueden ser modificados desde aquí.
+                <strong>¡Datos guardados con éxito!</strong> Tu ficha ha sido actualizada.
               </div>
             </div>
           )}
 
           {/* SECCIÓN A: IDENTIFICACIÓN GENERAL */}
-          <fieldset disabled={isDataLocked} className="space-y-4">
+          <fieldset className="space-y-4">
             <h3 className="text-xs font-bold uppercase tracking-wider text-[#4A6B53] font-mono">
               A. Datos de Identificación Institucional
             </h3>
@@ -301,7 +305,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   required
                   value={formData.fullName}
                   onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] disabled:opacity-70 focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
+                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                 />
               </div>
               <div>
@@ -312,7 +316,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   value={formData.matricula}
                   onChange={(e) => setFormData({ ...formData, matricula: e.target.value })}
                   placeholder="Ej. 12345678 o xxx-2026"
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] disabled:opacity-70 font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
+                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                 />
               </div>
               <div>
@@ -322,7 +326,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   required
                   value={formData.institutionalEmail}
                   onChange={(e) => setFormData({ ...formData, institutionalEmail: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] disabled:opacity-70 font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
+                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                   placeholder="ejemplo@itdurango.edu.mx o @gmail.com"
                 />
               </div>
@@ -335,7 +339,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   type="text"
                   value={formData.programName}
                   onChange={(e) => setFormData({ ...formData, programName: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] disabled:opacity-70 focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
+                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                 />
               </div>
               <div>
@@ -346,7 +350,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   max={14}
                   value={formData.semester}
                   onChange={(e) => setFormData({ ...formData, semester: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] disabled:opacity-70 font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
+                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                 />
               </div>
               <div>
@@ -355,7 +359,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   type="text"
                   value={formData.group || ''}
                   onChange={(e) => setFormData({ ...formData, group: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] disabled:opacity-70 font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
+                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                   placeholder="Ej. 1A, 2B"
                 />
               </div>
@@ -363,7 +367,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
           </fieldset>
 
           {/* SECCIÓN B: DATOS SOCIODEMOGRÁFICOS */}
-          <fieldset disabled={isDataLocked} className="space-y-4 pt-4 border-t border-[#E8E2D5]">
+          <fieldset className="space-y-4 pt-4 border-t border-[#E8E2D5]">
             <h3 className="text-xs font-bold uppercase tracking-wider text-[#4A6B53] font-mono">
               B. Datos Sociodemográficos y Contacto
             </h3>
@@ -375,7 +379,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   required
                   value={formData.age || ''}
                   onChange={(e) => setFormData({ ...formData, age: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] disabled:opacity-70 font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
+                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                 />
               </div>
               <div>
@@ -386,7 +390,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   value={formData.birthDate || ''}
                   onChange={(e) => setFormData({ ...formData, birthDate: e.target.value })}
                   placeholder="DD/MM/AAAA"
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] disabled:opacity-70 font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
+                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                 />
               </div>
               <div>
@@ -395,7 +399,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   required
                   value={formData.gender || 'No especificado'}
                   onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] disabled:opacity-70 focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
+                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                 >
                   <option value="Femenino">Femenino</option>
                   <option value="Masculino">Masculino</option>
@@ -411,7 +415,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   value={formData.phone || ''}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   placeholder="Ej. 618 123 4567"
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] disabled:opacity-70 font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
+                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                 />
               </div>
             </div>
@@ -425,7 +429,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   value={formData.originCity || ''}
                   onChange={(e) => setFormData({ ...formData, originCity: e.target.value })}
                   placeholder="Ej. Durango, Dgo. / Santiago Papasquiaro"
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] disabled:opacity-70 focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
+                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                 />
               </div>
               <div>
@@ -436,7 +440,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   value={formData.currentAddress || ''}
                   onChange={(e) => setFormData({ ...formData, currentAddress: e.target.value })}
                   placeholder="Calle, número, colonia"
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] disabled:opacity-70 focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
+                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                 />
               </div>
             </div>
@@ -452,7 +456,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   value={formData.emergencyContact || ''}
                   onChange={(e) => setFormData({ ...formData, emergencyContact: e.target.value })}
                   placeholder="Ej. María Soto (Mamá) / Tel: 618..."
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] disabled:opacity-70 focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
+                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                 />
               </div>
               <div>
@@ -462,7 +466,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                 <select
                   value={formData.computerAccess || 'Si'}
                   onChange={(e) => setFormData({ ...formData, computerAccess: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] disabled:opacity-70 focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
+                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                 >
                   <option value="Si">Sí, cuento con ambos</option>
                   <option value="Solo internet">Solo internet (sin computadora propia)</option>
@@ -472,8 +476,9 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
             </div>
           </fieldset>
-                    {/* SECCIÓN C: HÁBITOS DE ESTUDIO Y SALUD */}
-          <fieldset disabled={isDataLocked} className="space-y-4 pt-4 border-t border-[#E8E2D5]">
+
+          {/* SECCIÓN C: HÁBITOS DE ESTUDIO Y SALUD */}
+          <fieldset className="space-y-4 pt-4 border-t border-[#E8E2D5]">
             <h3 className="text-xs font-bold uppercase tracking-wider text-[#4A6B53] font-mono">
               C. Hábitos Académicos y Salud
             </h3>
@@ -483,7 +488,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                 <select
                   value={formData.studyHours || '1 1/2 Hora a 2 Horas'}
                   onChange={(e) => setFormData({ ...formData, studyHours: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] disabled:opacity-70 focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
+                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                 >
                   <option value="Menos de 1 hora">Menos de 1 hora</option>
                   <option value="1 1/2 Hora a 2 Horas">1 1/2 Hora a 2 Horas</option>
@@ -496,7 +501,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                 <select
                   value={formData.sleepHours || '6 a 8 horas'}
                   onChange={(e) => setFormData({ ...formData, sleepHours: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] disabled:opacity-70 focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
+                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                 >
                   <option value="Menos de 5 horas">Menos de 5 horas</option>
                   <option value="6 a 8 horas">6 a 8 horas (Recomendado)</option>
@@ -510,7 +515,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   onChange={(e) =>
                     setFormData({ ...formData, previousPsychologicalTherapy: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] disabled:opacity-70 focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
+                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                 >
                   <option value="No">No, nunca</option>
                   <option value="Sí">Sí, anteriormente</option>
@@ -526,33 +531,30 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                 value={formData.studyHabits || ''}
                 onChange={(e) => setFormData({ ...formData, studyHabits: e.target.value })}
                 placeholder="Ej. Tomar apuntes en clase, realizar resúmenes, mapas mentales, estudio en grupo..."
-                className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] disabled:opacity-70 text-xs focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
+                className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] text-xs focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
               />
             </div>
           </fieldset>
 
-          {!isDataLocked && (
-            <div className="pt-4 border-t border-[#E8E2D5] flex justify-end">
-              <button
-                type="submit"
-                className="px-6 py-2.5 text-xs font-bold text-white bg-[#4A6B53] hover:bg-[#3B5743] rounded-xl shadow-sm cursor-pointer inline-flex items-center gap-2"
-              >
-                <Save className="w-4 h-4" />
-                Guardar Mis Datos Personales
-              </button>
-            </div>
-          )}
+          <div className="pt-4 border-t border-[#E8E2D5] flex justify-end">
+            <button
+              type="submit"
+              className="px-6 py-2.5 text-xs font-bold text-white bg-[#4A6B53] hover:bg-[#3B5743] rounded-xl shadow-sm cursor-pointer inline-flex items-center gap-2"
+            >
+              <Save className="w-4 h-4" />
+              Guardar Mis Datos Personales
+            </button>
+          </div>
         </form>
       )}
-
-      {/* PESTAÑA 2: CUESTIONARIO 1 (BAI - ANSIEDAD / SENSACIONES FÍSICAS) */}
+            {/* PESTAÑA 2: CUESTIONARIO 1 (BAI - ANSIEDAD / SENSACIONES FÍSICAS) */}
       {activeTab === 'BAI' && (
         <div className="bg-white border border-[#E8E2D5] rounded-2xl p-6 sm:p-8 space-y-6">
           <div className="border-b border-[#E8E2D5] pb-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <span className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-[#A3C9A8] text-[#2F3E32]">
-                  Cuestionario 1 de 2
+                  {isDataLocked ? 'Cuestionario 1 de 2' : 'Cuestionario 1 de 2'}
                 </span>
                 <h2 className="text-xl font-bold text-[#2F3E32] mt-2">
                   Cuestionario de Sensaciones Físicas y Nerviosismo
@@ -580,7 +582,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
                 <span>
-                  <strong>¡Muchas gracias!</strong> Tus respuestas del Cuestionario 1 fueron enviadas con éxito. Ahora puedes continuar con el Cuestionario 2.
+                  <strong>¡Muchas gracias!</strong> Tus respuestas del Cuestionario 1 fueron enviadas con éxito.
                 </span>
               </div>
               <button
@@ -658,7 +660,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <span className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-[#A3C9A8] text-[#2F3E32]">
-                  Cuestionario 2 de 2
+                  {isDataLocked ? 'Cuestionario 2 de 2' : 'Cuestionario 2 de 2'}
                 </span>
                 <h2 className="text-xl font-bold text-[#2F3E32] mt-2">
                   Cuestionario de Estado de Ánimo y Pensamientos
@@ -686,7 +688,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
                 <span>
-                  <strong>¡Excelente trabajo!</strong> Has completado y enviado el Cuestionario 2. Tu proceso diagnóstico ha finalizado con éxito.
+                  <strong>¡Excelente trabajo!</strong> Has completado y enviado el Cuestionario 2.
                 </span>
               </div>
               <button
