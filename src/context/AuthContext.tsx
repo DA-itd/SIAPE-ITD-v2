@@ -72,19 +72,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
        
-      const { data: existingProfile, error: profileError } = await supabase
-        .from('profiles')
-        .select(PROFILE_SELECT)
-        .eq('auth_user_id', session.user.id)
-        .maybeSingle();
+         const { data: newProfile, error: createError } = await supabase
+             .from('profiles')
+             .insert({
+               auth_user_id: session.user.id,
+               email: email,
+               full_name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || 'Alumno ITD',
+               role_code: RoleCode.ESTUDIANTE,
+              account_status: 'ACTIVA',
+              })
+             .select(PROFILE_SELECT)
+             .single();
 
-      if (profileError) throw profileError;
-
-      let currentProfile = existingProfile;
-
-      // AUTO-REGISTRO PARA ALUMNOS
-      // Si no existe el perfil, y el correo es de alumno, lo creamos al instante.
-      if (!currentProfile) {
+             if (createError) {
+             // Vamos a imprimir el error real para saber qué pasa
+             console.error("Error exacto de Supabase al crear perfil:", createError);
+             throw new Error(`No se pudo crear el perfil: ${createError.message}`);
+            }
+           scurrentProfile = newProfile;
         const email = (session.user.email ?? '').toLowerCase();
         const isStudentDomain = email.endsWith('@itdurango.edu.mx') || email.endsWith('@gmail.com');
 
