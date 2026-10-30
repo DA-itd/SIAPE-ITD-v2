@@ -3,13 +3,6 @@ import type { Session } from '@supabase/supabase-js';
 import { AccountStatus, RoleCode, UserProfile } from '../types/siape';
 import { isSupabaseConfigured, signInWithSupabaseGoogle, supabase } from '../lib/supabase';
 
-/**
- * SIAPE-ITD | Autenticación real con Google (Supabase Auth).
- * La identidad y el rol salen SIEMPRE de la base de datos (tabla profiles),
- * nunca de lo que el usuario escriba en pantalla.
- */
-
-// El rol vive en profiles.role_code y la cuenta de Google se enlaza por profiles.auth_user_id.
 export const PROFILE_SELECT =
   'id, auth_user_id, full_name, email, role_code, account_status, professional_license, supervisor_id, created_at, last_login_at';
 
@@ -24,7 +17,6 @@ const DEPARTMENT_BY_ROLE: Record<string, string> = {
 
 export function mapProfileRow(row: any): UserProfile {
   const role = (row.role_code ?? null) as RoleCode | null;
-  // Perfil dado de alta pero que aún no ha iniciado sesión con Google: se muestra como pendiente.
   const status =
     !row.auth_user_id && row.account_status === 'ACTIVA' ? 'PENDIENTE_AUTORIZACION' : row.account_status;
   return {
@@ -49,7 +41,6 @@ export type AuthStatus = 'LOADING' | 'SIGNED_OUT' | 'BLOCKED' | 'READY' | 'ERROR
 interface AuthContextValue {
   status: AuthStatus;
   profile: UserProfile | null;
-  /** Correo de la sesión cuando la cuenta existe pero aún no tiene acceso. */
   blockedEmail: string | null;
   blockedReason: string | null;
   errorMessage: string | null;
@@ -78,46 +69,70 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setStatus('SIGNED_OUT');
       return;
     }
-    try {
-      // Enlaza la cuenta de Google con su perfil/alumno por correo y registra el acceso.
-      const { error: syncError } = await supabase.rpc('sync_my_authorization');
-      if (syncError) throw syncError;
 
-      const { data, error } = await supabase
+    try {
+      // Enlaza la cuenta de Google con su perfil/alumno por correo
+      await supabase.rpc('sync_my_authorization');
+
+      const { data: existingProfile, error: profileError } = await supabase
         .from('profiles')
         .select(PROFILE_SELECT)
         .eq('auth_user_id', session.user.id)
         .maybeSingle();
 
-      if (error) throw error;
-      if (!data) {
+      if (profileError) throw profileError;
+
+      let currentProfile = existingProfile;
+
+      // AUTO-REGISTRO PARA ALUMNOS
+      // Si no existe el perfil, y el correo es de alumno, lo creamos al instante.
+      if (!currentProfile) {
         const email = (session.user.email ?? '').toLowerCase();
-        setBlockedEmail(email);
-        setBlockedReason(
-          'Este correo no está autorizado. Los alumnos usan @itdurango.edu.mx o @gmail.com; ' +
-            'el personal debe ser dado de alta por el administrador o por su psicólogo supervisor.'
-        );
-        setProfile(null);
-        setStatus('BLOCKED');
-        return;
+        const isStudentDomain = email.endsWith('@itdurango.edu.mx') || email.endsWith('@gmail.com');
+
+        if (isStudentDomain) {
+          // 1. Crear perfil de alumno
+          const { data: newProfile, error: createError } = await supabase
+            .from('profiles')
+            .insert({
+              auth_user_id: session.user.id,
+              email: email,
+              full_name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || 'Alumno ITD',
+              role_code: RoleCode.ESTUDIANTE,
+              account_status: 'ACTIVA',
+            })
+            .select(PROFILE_SELECT)
+            .single();
+
+          if (createError) {
+            console.error("Error creando perfil de alumno:", createError);
+            throw new Error("No se pudo crear el perfil del alumno. Avisa al administrador.");
+          }
+          currentProfile = newProfile;
+        } else {
+          // Si es personal (no alumno) y no está dado de alta, lo bloqueamos.
+          setBlockedEmail(email);
+          setBlockedReason('El personal debe ser dado de alta previamente por el administrador.');
+          setProfile(null);
+          setStatus('BLOCKED');
+          return;
+        }
       }
 
-      const mapped = mapProfileRow(data);
+      const mapped = mapProfileRow(currentProfile);
       const email = (session.user.email ?? mapped.email).toLowerCase();
 
       if (mapped.status === 'SUSPENDIDA' || mapped.status === 'REVOCADA') {
         setBlockedEmail(email);
-        setBlockedReason(`Tu cuenta está ${mapped.status.toLowerCase()}. Contacta al administrador del sistema.`);
+        setBlockedReason(`Tu cuenta está ${mapped.status.toLowerCase()}. Contacta al administrador.`);
         setProfile(null);
         setStatus('BLOCKED');
         return;
       }
+      
       if (!mapped.role || mapped.status !== 'ACTIVA') {
         setBlockedEmail(email);
-        setBlockedReason(
-          'Este correo aún no está autorizado. Los alumnos usan @itdurango.edu.mx o @gmail.com; ' +
-            'el personal debe ser dado de alta por el administrador o por su psicólogo supervisor.'
-        );
+        setBlockedReason('Este correo no está autorizado.');
         setProfile(null);
         setStatus('BLOCKED');
         return;
@@ -128,6 +143,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setBlockedReason(null);
       setStatus('READY');
     } catch (err: any) {
+      console.error(err);
       setErrorMessage(err?.message || 'Error desconocido al validar la sesión.');
       setStatus('ERROR');
     }
@@ -141,7 +157,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     supabase.auth.getSession().then(({ data }) => resolveSession(data.session));
 
-    // Importante: no hacer llamadas a Supabase dentro del callback (puede bloquear la sesión).
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'INITIAL_SESSION') return;
       setTimeout(() => resolveSession(session), 0);
