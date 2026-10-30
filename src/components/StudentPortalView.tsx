@@ -34,6 +34,40 @@ interface StudentPortalViewProps {
   ) => void;
   onLogoutOrSwitchRole?: () => void;
 }
+// Función para generar una nota musical relajante (Acorde de Do Mayor) usando Web Audio API
+const playRelaxingChime = () => {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+
+    // Frecuencias de un acorde mayor suave (Do4, Mi4, Sol4)
+    const frequencies = [261.63, 329.63, 392.00];
+    
+    frequencies.forEach((freq, index) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      // Tipo de onda 'sine' genera un tono puro y suave (como una flauta o campana)
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+
+      // Envolvente de volumen: empieza en 0, sube rápido y se desvanece suavemente
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 2.5);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      // Un pequeño retraso para que suene como un arpegio rápido
+      osc.start(ctx.currentTime + index * 0.1);
+      osc.stop(ctx.currentTime + 2.5);
+    });
+  } catch (error) {
+    console.log("El navegador bloqueó el audio automático, pero la evaluación se guardó correctamente.");
+  }
+};
 
 export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   currentUser,
@@ -119,7 +153,6 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   const handleSendAssessment = (inst: InstrumentCode) => {
     const responses = inst === InstrumentCode.BAI ? baiResponses : bdiResponses;
     
-    // Validación rápida antes de enviar
     if (Object.keys(responses).length < 21) {
       alert('Por favor responde todos los reactivos antes de enviar.');
       return;
@@ -127,7 +160,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
     setSubmittedInstrument(inst);
     onSubmitAssessment(inst, responses);
-    setTimeout(() => setSubmittedInstrument(null), 6000);
+    setTimeout(() => setSubmittedInstrument(null), 8000); // El mensaje de éxito dura 8 segundos
   };
 
   const getOptionLabel = (inst: InstrumentCode, val: number) => {
@@ -223,7 +256,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   : 'bg-amber-100 text-amber-900'
               }`}
             >
-              {baiExisting || baiAnsweredCount === 21 ? 'OK' : `${baiAnsweredCount}/21`}
+              {baiExisting ? 'OK' : `${baiAnsweredCount}/21`}
             </span>
           </button>
           <button
@@ -243,7 +276,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   : 'bg-amber-100 text-amber-900'
               }`}
             >
-              {bdiExisting || bdiAnsweredCount === 21 ? 'OK' : `${bdiAnsweredCount}/21`}
+              {bdiExisting ? 'OK' : `${bdiAnsweredCount}/21`}
             </span>
           </button>
         </div>
@@ -474,25 +507,25 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             </div>
           </div>
 
+          {/* MENSAJE DE ALIENTO TRAS ENVIAR */}
           {submittedInstrument === InstrumentCode.BAI && (
-            <div className="p-4 bg-emerald-50 border-2 border-emerald-500 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-emerald-950">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                <span className="text-center sm:text-left">
-                  <strong>¡Enviado con éxito!</strong> Tus respuestas del Cuestionario 1 fueron recibidas.
-                </span>
-              </div>
+            <div className="p-6 bg-emerald-50 border-2 border-emerald-400 rounded-2xl flex flex-col items-center justify-center gap-3 text-center">
+              <CheckCircle2 className="w-10 h-10 text-emerald-600" />
+              <h3 className="text-lg font-bold text-emerald-900">¡Muchas gracias por tus respuestas!</h3>
+              <p className="text-sm text-emerald-800">
+                Tus respuestas han sido recibidas de forma confidencial. Te esperamos en un mes para revisar tu avance.
+              </p>
               <button
                 onClick={() => setActiveTab('BDI')}
-                className="w-full sm:w-auto px-4 py-2 font-bold text-white bg-[#4A6B53] rounded-lg cursor-pointer whitespace-nowrap"
+                className="mt-2 px-6 py-2.5 font-bold text-white bg-[#4A6B53] rounded-xl cursor-pointer"
               >
-                Ir al Cuestionario 2 ➔
+                Continuar al Cuestionario 2 ➔
               </button>
             </div>
           )}
 
           {/* LISTA DE LOS 21 REACTIVOS */}
-          <div className="space-y-4">
+          <div className={`space-y-4 ${submittedInstrument === InstrumentCode.BAI ? 'opacity-50 pointer-events-none' : ''}`}>
             {baiConfig.items.map((item) => {
               const currentVal = baiResponses[item.itemNumber];
               return (
@@ -508,15 +541,12 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                     <span className="font-mono text-[#A3C9A8] mr-2">{item.itemNumber}.</span>
                     {item.placeholderLabel}
                   </div>
-                  {/* OPCIONES EN COLUMNA EN MÓVIL, FILA EN PC */}
                   <div className="flex flex-col sm:grid sm:grid-cols-4 gap-2 text-xs">
                     {[0, 1, 2, 3].map((val) => (
                       <button
                         key={val}
                         type="button"
-                        onClick={() =>
-                          setBaiResponses((prev) => ({ ...prev, [item.itemNumber]: val }))
-                        }
+                        onClick={() => setBaiResponses((prev) => ({ ...prev, [item.itemNumber]: val }))}
                         className={`w-full p-3 rounded-lg border text-left cursor-pointer transition-all ${
                           currentVal === val
                             ? 'bg-[#4A6B53] text-white border-[#4A6B53] font-bold shadow-sm'
@@ -532,12 +562,10 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             })}
           </div>
 
-          {/* BOTÓN FLOTANTE / FIJO PARA ENVIAR */}
-          <div className="sticky bottom-4 pt-4 mt-6 border-t border-[#E8E2D5] bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-between gap-3 z-10">
+          {/* BOTÓN FLOTANTE PARA ENVIAR */}
+          <div className={`sticky bottom-4 pt-4 mt-6 border-t border-[#E8E2D5] bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-between gap-3 z-10 ${submittedInstrument === InstrumentCode.BAI ? 'hidden' : ''}`}>
             <div className="text-xs text-[#4A6B53] font-bold">
-              {baiAnsweredCount === 21
-                ? '✅ Todo listo para enviar.'
-                : `Faltan ${21 - baiAnsweredCount} preguntas.`}
+              {baiAnsweredCount === 21 ? '✅ Todo listo para enviar.' : `Faltan ${21 - baiAnsweredCount} preguntas.`}
             </div>
             <button
               type="button"
@@ -579,17 +607,17 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             </div>
           </div>
 
+          {/* MENSAJE DE ALIENTO TRAS ENVIAR */}
           {submittedInstrument === InstrumentCode.BDI && (
-            <div className="p-4 bg-emerald-50 border-2 border-emerald-500 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-emerald-950">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                <span className="text-center sm:text-left">
-                  <strong>¡Enviado con éxito!</strong> Has completado el Cuestionario 2.
-                </span>
-              </div>
+            <div className="p-6 bg-emerald-50 border-2 border-emerald-400 rounded-2xl flex flex-col items-center justify-center gap-3 text-center">
+              <CheckCircle2 className="w-10 h-10 text-emerald-600" />
+              <h3 className="text-lg font-bold text-emerald-900">¡Muchas gracias por tus respuestas!</h3>
+              <p className="text-sm text-emerald-800">
+                Has completado todo el proceso. La Oficina de Psicología revisará tu información y te contactará si es necesario. Te esperamos en un mes para ver tu avance.
+              </p>
               <button
                 onClick={() => setActiveTab('ESTADO')}
-                className="w-full sm:w-auto px-4 py-2 font-bold text-white bg-[#4A6B53] rounded-lg cursor-pointer whitespace-nowrap"
+                className="mt-2 px-6 py-2.5 font-bold text-white bg-[#4A6B53] rounded-xl cursor-pointer"
               >
                 Ver mi Estado Final ➔
               </button>
@@ -597,7 +625,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
           )}
 
           {/* LISTA DE LOS 21 REACTIVOS */}
-          <div className="space-y-4">
+          <div className={`space-y-4 ${submittedInstrument === InstrumentCode.BDI ? 'opacity-50 pointer-events-none' : ''}`}>
             {bdiConfig.items.map((item) => {
               const currentVal = bdiResponses[item.itemNumber];
               return (
@@ -613,15 +641,12 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                     <span className="font-mono text-[#A3C9A8] mr-2">{item.itemNumber}.</span>
                     {item.placeholderLabel}
                   </div>
-                  {/* OPCIONES EN COLUMNA EN MÓVIL, FILA EN PC */}
                   <div className="flex flex-col sm:grid sm:grid-cols-4 gap-2 text-xs">
                     {[0, 1, 2, 3].map((val) => (
                       <button
                         key={val}
                         type="button"
-                        onClick={() =>
-                          setBdiResponses((prev) => ({ ...prev, [item.itemNumber]: val }))
-                        }
+                        onClick={() => setBdiResponses((prev) => ({ ...prev, [item.itemNumber]: val }))}
                         className={`w-full p-3 rounded-lg border text-left cursor-pointer transition-all ${
                           currentVal === val
                             ? 'bg-[#4A6B53] text-white border-[#4A6B53] font-bold shadow-sm'
@@ -637,12 +662,10 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             })}
           </div>
 
-          {/* BOTÓN FLOTANTE / FIJO PARA ENVIAR */}
-          <div className="sticky bottom-4 pt-4 mt-6 border-t border-[#E8E2D5] bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-between gap-3 z-10">
+          {/* BOTÓN FLOTANTE PARA ENVIAR */}
+          <div className={`sticky bottom-4 pt-4 mt-6 border-t border-[#E8E2D5] bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-between gap-3 z-10 ${submittedInstrument === InstrumentCode.BDI ? 'hidden' : ''}`}>
             <div className="text-xs text-[#4A6B53] font-bold">
-              {bdiAnsweredCount === 21
-                ? '✅ Todo listo para enviar.'
-                : `Faltan ${21 - bdiAnsweredCount} preguntas.`}
+              {bdiAnsweredCount === 21 ? '✅ Todo listo para enviar.' : `Faltan ${21 - bdiAnsweredCount} preguntas.`}
             </div>
             <button
               type="button"
@@ -672,7 +695,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               <div className="flex items-center justify-between">
                 <span className="font-bold text-sm text-[#2F3E32]">1. Sensaciones Físicas (BAI)</span>
                 <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${baiExisting || baiAnsweredCount === 21 ? 'bg-[#A3C9A8] text-[#2F3E32]' : 'bg-amber-100 text-amber-900'}`}>
-                  {baiExisting || baiAnsweredCount === 21 ? 'Completado' : 'Pendiente'}
+                  {baiExisting ? 'Completado' : 'Pendiente'}
                 </span>
               </div>
               <p className="text-xs text-[#4A6B53]">
@@ -684,7 +707,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               <div className="flex items-center justify-between">
                 <span className="font-bold text-sm text-[#2F3E32]">2. Estado de Ánimo (BDI)</span>
                 <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${bdiExisting || bdiAnsweredCount === 21 ? 'bg-[#A3C9A8] text-[#2F3E32]' : 'bg-amber-100 text-amber-900'}`}>
-                  {bdiExisting || bdiAnsweredCount === 21 ? 'Completado' : 'Pendiente'}
+                  {bdiExisting ? 'Completado' : 'Pendiente'}
                 </span>
               </div>
               <p className="text-xs text-[#4A6B53]">
