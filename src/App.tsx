@@ -318,12 +318,41 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
   const selectedClinicalCase = authorizedCases.find((c) => c.id === selectedCaseId) || authorizedCases[0];
   const selectedStudent = students.find((s) => s.id === selectedClinicalCase?.studentId);
 
-  const currentStudent = React.useMemo(() => {
-    if (currentUser.linkedStudentId) {
-      const found = students.find((s) => s.id === currentUser.linkedStudentId);
-      if (found) return found;
+    const currentStudent = React.useMemo(() => {
+     // 1. Intentar por ID vinculado (si el contexto ya lo cargó)
+       if (currentUser.linkedStudentId) {
+         const found = students.find((s) => s.id === currentUser.linkedStudentId);
+         if (found) return found;
+       }
+
+    // 2. Intentar por correo electrónico (la forma más segura para alumnos nuevos)
+    const email = currentUser.email.toLowerCase().trim();
+    const foundByEmail = students.find(
+      (s) => s.institutionalEmail.toLowerCase().trim() === email
+    );
+    if (foundByEmail) return foundByEmail;
+
+    // 3. Si es un alumno recién creado y aún no se ha recargado la lista de students,
+    // creamos un registro temporal en memoria para que la vista no se quede en blanco.
+    if (currentUser.role === RoleCode.ESTUDIANTE) {
+      return {
+        id: 'temp-student-id',
+        matricula: 'PENDIENTE',
+        fullName: currentUser.fullName,
+        institutionalEmail: currentUser.email,
+        programName: 'Sin asignar',
+        semester: 0,
+        group: '',
+        entryGeneration: '',
+        registrationStatus: 'ACTIVO',
+        incorporatedAt: new Date().toISOString(),
+        entryModality: AttentionModality.NUEVO_INGRESO,
+        academicDepartment: '',
+        programId: '',
+      } as StudentRecord;
     }
-    return students.find((s) => s.institutionalEmail.toLowerCase() === currentUser.email.toLowerCase());
+
+    return undefined;
   }, [currentUser, students]);
 
   const currentStudentCase = React.useMemo(() => cases.find((c) => c.studentId === currentStudent?.id), [cases, currentStudent]);
