@@ -71,9 +71,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      // Enlaza la cuenta de Google con su perfil/alumno por correo
-      await supabase.rpc('sync_my_authorization');
-
+       
       const { data: existingProfile, error: profileError } = await supabase
         .from('profiles')
         .select(PROFILE_SELECT)
