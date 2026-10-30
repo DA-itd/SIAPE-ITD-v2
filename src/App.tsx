@@ -119,10 +119,11 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     return () => { active = false; };
   }, [loadDirectory]);
 
-     const persistStudentRecord = async (s: StudentRecord): Promise<boolean> => {
-    if (!supabase) return false;
-    let formattedBirthDate = null;
-    if (s.birthDate) {
+       const persistStudentRecord = async (s: StudentRecord): Promise<boolean> => {
+        if (!supabase) return false;
+    
+        let formattedBirthDate = null;
+        if (s.birthDate) {
       if (/^\d{2}\/\d{2}\/\d{4}$/.test(s.birthDate)) {
         const [day, month, year] = s.birthDate.split('/');
         formattedBirthDate = `${year}-${month}-${day}`;
@@ -131,26 +132,27 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
       }
     }
 
-    const patch = {
+    const patch: Record<string, unknown> = {
       full_name: s.fullName,
-      matricula: s.matricula,           // <--- AGREGADO
-      institutional_email: s.institutionalEmail, // <--- AGREGADO
+      matricula: s.matricula,
+      institutional_email: s.institutionalEmail,
       program_name: s.programName || 'Sin asignar',
       semester: s.semester > 0 ? s.semester : null,
+      group_code: s.group || null,
       gender: s.gender ?? null, 
       age: s.age ?? null, 
       phone: s.phone ?? null,
       current_address: s.currentAddress ?? null, 
       origin_city: s.originCity ?? null,
-      emergency_contact: s.emergencyContact ?? null, // <--- CORREGIDO
+      emergency_contact: s.emergencyContact ?? null,
     };
     if (formattedBirthDate) patch.birth_date = formattedBirthDate;
 
     const { data, error } = await supabase.from('students').update(patch).eq('id', s.id).select('id');
     
     if (error || !data?.length) {
-      console.error("Error Supabase:", error);
-      throw new Error(error?.message || 'No se pudo guardar en la base de datos'); // <--- LANZA ERROR
+      console.error("Error al guardar ficha:", error);
+      throw new Error(error?.message || 'No se pudo guardar en la base de datos');
     }
     return true;
   };
