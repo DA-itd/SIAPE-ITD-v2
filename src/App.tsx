@@ -9,6 +9,7 @@ import {
   BookOpen,
   ClipboardCheck,
   Database,
+  Eye, // Nuevo icono para ver como alumno
   FileBarChart2,
   FolderKanban,
   GraduationCap,
@@ -64,11 +65,9 @@ type PrimaryView =
   | 'USUARIOS'
   | 'REPORTES';
 
-// Los periodos de evaluación se darán de alta desde el módulo correspondiente (Etapa 2).
 const EVALUATION_PERIODS: EvaluationPeriod[] = [];
 
 function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: () => void }) {
-  // Estado reactivo institucional: arranca VACÍO. Todo proviene de Supabase tras iniciar sesión.
   const [users, setUsers] = useState<UserProfile[]>([authUser]);
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [cases, setCases] = useState<ClinicalCaseRecord[]>([]);
@@ -77,6 +76,9 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
   const [tasks, setTasks] = useState<FollowUpTask[]>([]);
   const [tutorAlerts, setTutorAlerts] = useState<AcademicSupportAlert[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+
+  // --- NUEVO ESTADO: MODO SIMULACIÓN PARA ADMINISTRADOR ---
+  const [viewAsStudentMode, setViewAsStudentMode] = useState<boolean>(false);
 
   const [activeView, setActiveView] = useState<PrimaryView>(
     authUser.role === RoleCode.ESTUDIANTE ? 'EVALUACIONES' : 'PANEL_PRINCIPAL'
@@ -87,10 +89,8 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
   const [dataError, setDataError] = useState<string | null>(null);
   const hasUserMutatedState = useRef<boolean>(false);
 
-  // La identidad sale de la sesión autenticada, nunca de un selector en pantalla.
   const currentUser = users.find((u) => u.id === authUser.id) || authUser;
 
-  // Carga el directorio real desde Supabase. Las políticas RLS ya filtran lo que cada rol puede ver.
   const loadDirectory = React.useCallback(async () => {
     if (!supabase) return;
     try {
@@ -266,7 +266,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     setAuditLogs((prev) => [newEntry, ...prev]);
   };
 
-  // Abrir Expediente Psicológico Único con registro en bitácora de auditoría
   const handleOpenClinicalCase = (caseId: string) => {
     setSelectedCaseId(caseId);
     setActiveView('EXPEDIENTE_UNICO');
@@ -278,7 +277,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     );
   };
 
-  // Asignación de psicólogo titular y/o practicante supervisado a un expediente
   const handleAssignCaseResponsible = (
     caseId: string,
     psychologistId?: string | null,
@@ -310,7 +308,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
       })
     );
 
-    // Actualizar assignedCaseIds en usuarios
     setUsers((prev) =>
       prev.map((u) => {
         let caseIds = [...u.assignedCaseIds];
@@ -337,7 +334,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     handleAssignCaseResponsible(caseId, psychologistId, undefined);
   };
 
-  // Aplicación de "Nueva evaluación" (BAI o BDI) durante la consulta (Ampliación Sección 3)
   const handleCreateConsultationAssessment = (payload: {
     clinicalCaseId: string;
     studentId: string;
@@ -364,7 +360,7 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
       id: newAssessmentId,
       clinicalCaseId: payload.clinicalCaseId,
       studentId: payload.studentId,
-      periodId: null as unknown as string, // Etapa 2: asociar al periodo de evaluación vigente
+      periodId: null as unknown as string,
       modality: AttentionModality.ATENCION_INDIVIDUAL,
       instrumentCode: payload.instrumentCode,
       instrumentVersionId: config.id,
@@ -393,7 +389,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
 
     setAssessments((prev) => [newAssessment, ...prev]);
 
-    // Actualizar indicadores independientes en el Expediente Único (solo si la evaluación está completa)
     setCases((prev) =>
       prev.map((c) => {
         if (c.id !== payload.clinicalCaseId) return c;
@@ -418,7 +413,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
           }
           if (detResult.suggestedPriority) {
             updatedCase.psychometricSuggestedPriority = detResult.suggestedPriority;
-            // Si el nuevo resultado psicométrico es ROJO, elevar prioridad operativa
             if (detResult.suggestedPriority === PriorityLevel.ROJO) {
               updatedCase.operationalPriority = PriorityLevel.ROJO;
             }
@@ -446,7 +440,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     );
   };
 
-  // Registrar Sesión de Atención Psicológica
   const handleRegisterSession = (payload: {
     clinicalCaseId: string;
     studentId: string;
@@ -481,7 +474,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
 
     setSessions((prev) => [newSession, ...prev]);
 
-    // Actualizar estado del caso (NUNCA se cierra automáticamente por haber registrado una sesión)
     setCases((prev) =>
       prev.map((c) =>
         c.id === payload.clinicalCaseId
@@ -504,7 +496,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     );
   };
 
-  // Elevación manual de prioridad operativa / Activación de protocolo urgente
   const handleManualPriorityElevation = (payload: {
     clinicalCaseId: string;
     newPriority: PriorityLevel;
@@ -559,7 +550,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     );
   };
 
-  // Emitir Alerta de Acompañamiento Académico para Tutoría (sin compartir datos clínicos)
   const handleEmitTutorAlert = (payload: {
     clinicalCaseId: string;
     studentId: string;
@@ -598,7 +588,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     );
   };
 
-  // Alta de estudiante o recuperación de Expediente Único existente (Modalidad A y B)
   const handleRegisterStudentAndSingleCase = (payload: {
     matricula: string;
     fullName: string;
@@ -609,7 +598,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     entryGeneration: string;
     entryModality: AttentionModality;
   }): { status: 'CREATED' | 'EXISTING_RECOVERED'; caseId: string; message: string } => {
-    // 1. Verificar si ya existe por matrícula o correo institucional (Evitar duplicados)
     const existingStudent = students.find(
       (s) =>
         s.matricula.toLowerCase() === payload.matricula.toLowerCase() ||
@@ -710,7 +698,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     };
   };
 
-  // Completar tarea de seguimiento
   const handleCompleteFollowUpTask = (
     taskId: string,
     outcomeNote: string,
@@ -746,7 +733,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     );
   };
 
-  // Registrar acción tutorial por el Tutor Académico
   const handleRegisterTutorAction = (alertId: string, actionSummary: string) => {
     setTutorAlerts((prev) =>
       prev.map((a) =>
@@ -770,7 +756,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     );
   };
 
-  // Alta de usuario administrativo / clínico
   const handleCreateUserProfile = async (payload: {
     fullName: string;
     email: string;
@@ -803,9 +788,8 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     );
   };
 
-  // Cambiar estado de cuenta (Activar / Suspender / Revocar)
   const handleUpdateUserAccountStatus = async (targetUserId: string, newStatus: AccountStatus) => {
-    if (targetUserId === currentUser.id || !supabase) return; // Protección anti-autoedición
+    if (targetUserId === currentUser.id || !supabase) return;
     const targetUser = users.find((u) => u.id === targetUserId);
     if (!targetUser) return;
     const { error } = await supabase.rpc('admin_set_account_status', {
@@ -825,10 +809,8 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     );
   };
 
-  // Envío de autoevaluación por el Estudiante autenticado
   const handleStudentSubmitSelfAssessment = () => {};
 
-  // Filtrado RLS estricto conforme a la jerarquía de tres niveles + alumnos
   const authorizedCases = React.useMemo(
     () => filterCasesForUser(currentUser, cases, users),
     [currentUser, cases, users]
@@ -844,7 +826,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
 
   const selectedStudent = students.find((s) => s.id === selectedClinicalCase?.studentId);
 
-  // Identificar el registro del estudiante cuando el rol activo es ESTUDIANTE
   const currentStudent = React.useMemo(() => {
     if (currentUser.linkedStudentId) {
       const found = students.find((s) => s.id === currentUser.linkedStudentId);
@@ -860,14 +841,16 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     return cases.find((c) => c.studentId === currentStudent?.id);
   }, [cases, currentStudent]);
 
-  // Si el usuario cambia al rol ESTUDIANTE, llevarlo automáticamente a su vista exclusiva de cuestionarios
+  // Alumno de prueba para el Modo Simulación del Administrador
+  const simulationStudent = students[0] || null;
+  const simulationStudentCase = cases.find((c) => c.studentId === simulationStudent?.id) || null;
+
   useEffect(() => {
     if (currentUser.role === RoleCode.ESTUDIANTE && activeView !== 'EVALUACIONES') {
       setActiveView('EVALUACIONES');
     }
   }, [currentUser.role, activeView]);
-
-  const allSidebarItems: {
+    const allSidebarItems: {
     id: PrimaryView;
     label: string;
     icon: React.ComponentType<{ className?: string }>;
@@ -899,14 +882,11 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
 
   return (
     <div className="min-h-screen flex bg-[#FDFBF7] text-[#3B4A3F]">
-      {/* SIDEBAR INSTITUCIONAL ITD (264px en escritorio) */}
+      {/* SIDEBAR INSTITUCIONAL ITD - OCULTO EN MÓVILES (hidden lg:flex) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 bg-[#F4F0E6] text-[#3B4A3F] flex flex-col justify-between transition-transform lg:static lg:translate-x-0 no-print border-r border-[#E8E2D5] ${
-          mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className="hidden lg:flex flex-col w-64 bg-[#F4F0E6] text-[#3B4A3F] justify-between border-r border-[#E8E2D5] no-print shrink-0"
       >
         <div>
-          {/* Identidad Institucional ITD */}
           <div className="px-5 py-5 border-b border-[#E8E2D5] bg-[#A3C9A8]">
             <div className="flex items-center justify-between">
               <div>
@@ -920,16 +900,9 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
                   Instituto Tecnológico de Durango
                 </div>
               </div>
-              <button
-                onClick={() => setMobileMenuOpen(false)}
-                className="lg:hidden text-[#2F3E32] p-1"
-              >
-                <X className="w-4 h-4" />
-              </button>
             </div>
           </div>
 
-          {/* Navegación de Módulos */}
           <nav className="p-3 space-y-1">
             {sidebarItems.map((item) => {
               const Icon = item.icon;
@@ -939,7 +912,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
                   key={item.id}
                   onClick={() => {
                     setActiveView(item.id);
-                    setMobileMenuOpen(false);
                   }}
                   className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors cursor-pointer text-left ${
                     isActive
@@ -955,7 +927,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
           </nav>
         </div>
 
-        {/* Estado Institucional */}
         <div className="p-4 border-t border-[#E8E2D5] text-[11px] text-[#4A6B53] space-y-2">
           <div className="font-semibold text-[#2F3E32] flex items-center gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5 text-[#4A6B53] shrink-0" />
@@ -982,26 +953,32 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
 
       {/* CONTENEDOR PRINCIPAL */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* TOP HEADER CON CONTROL DE AUTENTICACIÓN GOOGLE / GMAIL */}
-        <header className="bg-white border-b border-[#E8E2D5] px-6 py-3.5 flex items-center justify-between gap-4 no-print">
-          {/* Zona 1: Breadcrumb contextual */}
+        {/* TOP HEADER */}
+        <header className="bg-white border-b border-[#E8E2D5] px-4 md:px-6 py-3.5 flex items-center justify-between gap-4 no-print">
           <div className="flex items-center gap-3 min-w-0">
-            <button
-              onClick={() => setMobileMenuOpen(true)}
-              className="lg:hidden p-1.5 border border-[#E8E2D5] rounded-lg text-[#4A6B53]"
-            >
-              <Menu className="w-4 h-4" />
-            </button>
             <div className="text-sm font-bold text-[#2F3E32] whitespace-nowrap truncate">
               SIAPE-ITD <span className="text-[#A3C9A8] font-normal mx-1.5">/</span>{' '}
               <span className="text-[#4A6B53]">{currentViewLabel}</span>
             </div>
           </div>
 
-          {/* Zona 2 y 3: Identidad de Sesión y Acceso Google */}
-          <div className="flex items-center gap-3 text-xs">
-            {/* Distintivo de Nivel Jerárquico */}
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-[#E8E2D5] bg-[#FDFBF7] text-xs">
+          <div className="flex items-center gap-2 md:gap-3 text-xs">
+            {/* BOTÓN DE MODO SIMULACIÓN PARA ADMINISTRADOR */}
+            {currentUser.role === RoleCode.ADMINISTRADOR && (
+              <button
+                onClick={() => setViewAsStudentMode(!viewAsStudentMode)}
+                className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-colors ${
+                  viewAsStudentMode 
+                    ? 'bg-amber-100 text-amber-900 border border-amber-300' 
+                    : 'bg-[#F4F0E6] text-[#4A6B53] border border-[#E8E2D5] hover:bg-[#E8E2D5]'
+                }`}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                {viewAsStudentMode ? 'Salir de Modo Alumno' : 'Ver como Alumno'}
+              </button>
+            )}
+
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-[#E8E2D5] bg-[#FDFBF7] text-xs">
               {currentUser.role === RoleCode.ADMINISTRADOR && (
                 <span className="font-bold text-purple-900 bg-purple-100 px-2 py-0.5 rounded-md text-[11px] flex items-center gap-1">
                   👑 Nivel 1: Superadmin
@@ -1029,10 +1006,10 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
 
             <button
               onClick={onSignOut}
-              className="px-3.5 py-2 bg-white border border-[#E8E2D5] hover:bg-[#F4F0E6] text-[#4A6B53] text-xs font-bold rounded-xl inline-flex items-center gap-2 cursor-pointer transition-all"
+              className="px-3 py-1.5 bg-white border border-[#E8E2D5] hover:bg-[#F4F0E6] text-[#4A6B53] text-xs font-bold rounded-xl inline-flex items-center gap-2 cursor-pointer transition-all"
             >
               <Lock className="w-3.5 h-3.5" />
-              Cerrar sesión
+              <span className="hidden sm:inline">Cerrar sesión</span>
             </button>
           </div>
         </header>
@@ -1068,45 +1045,34 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
         </div>
 
         {/* ÁREA DE CONTENIDO PRINCIPAL */}
-        <main className="flex-1 p-6 max-w-[1440px] w-full mx-auto bg-[#FDFBF7]">
+        <main className="flex-1 p-4 md:p-6 max-w-[1440px] w-full mx-auto bg-[#FDFBF7]">
           {dataLoading ? (
             <div className="p-6 text-sm text-[#4A6B53]">Cargando información…</div>
           ) : dataError ? (
             <div className="p-4 rounded-xl border border-rose-200 bg-rose-50 text-sm text-rose-900">
               {dataError}
             </div>
-          ) : currentUser.role === RoleCode.ESTUDIANTE ? (
-            currentStudent ? (
+          ) : currentUser.role === RoleCode.ESTUDIANTE || viewAsStudentMode ? (
+            // VISTA DE ALUMNO (o simulación de Admin)
+            (currentUser.role === RoleCode.ESTUDIANTE ? currentStudent : simulationStudent) ? (
             <StudentPortalView
-              currentUser={currentUser}
-              student={currentStudent}
-              clinicalCase={currentStudentCase}
-              assessments={assessments.filter((a) => a.studentId === currentStudent.id)}
+              currentUser={viewAsStudentMode ? { ...currentUser, fullName: simulationStudent?.fullName || 'Alumno en Simulación' } : currentUser}
+              student={(currentUser.role === RoleCode.ESTUDIANTE ? currentStudent : simulationStudent)!}
+              clinicalCase={currentUser.role === RoleCode.ESTUDIANTE ? currentStudentCase : simulationStudentCase}
+              assessments={assessments.filter((a) => a.studentId === (currentUser.role === RoleCode.ESTUDIANTE ? currentStudent?.id : simulationStudent?.id))}
               onUpdateStudentRecord={async (updated) => {
                 if (!(await persistStudentRecord(updated))) return;
                 setStudents((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-                setCases((prev) =>
-                  prev.map((c) =>
-                    c.studentId === updated.id
-                      ? {
-                          ...c,
-                          studentFullName: updated.fullName,
-                          studentMatricula: updated.matricula,
-                          studentProgram: updated.programName,
-                          updatedAt: new Date().toISOString(),
-                        }
-                      : c
-                  )
-                );
-                hasUserMutatedState.current = true;
               }}
               onSubmitAssessment={(instrumentCode, responses) => {
-                if (!currentStudentCase) return; // sin expediente no hay a dónde asociar la evaluación
+                const targetCase = currentUser.role === RoleCode.ESTUDIANTE ? currentStudentCase : simulationStudentCase;
+                const targetStudent = currentUser.role === RoleCode.ESTUDIANTE ? currentStudent : simulationStudent;
+                if (!targetCase || !targetStudent) return;
                 handleCreateConsultationAssessment({
-                  clinicalCaseId: currentStudentCase.id,
-                  studentId: currentStudent.id,
+                  clinicalCaseId: targetCase.id,
+                  studentId: targetStudent.id,
                   instrumentCode,
-                  applicationContextNote: `Cuestionario autoadministrado por el estudiante (${currentUser.email}).`,
+                  applicationContextNote: `Cuestionario autoadministrado (${currentUser.email}).`,
                   responses,
                   professionalInterpretation: '',
                   overridePriority: null,
@@ -1118,11 +1084,14 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
               onLogoutOrSwitchRole={onSignOut}
             />
             ) : (
-              <div className="p-6 text-sm text-slate-600">
-                Tu registro de alumno se está preparando. Cierra sesión y vuelve a entrar; si persiste, avisa a la Oficina de Psicología.
+              <div className="p-6 text-sm text-[#4A6B53]">
+                {currentUser.role === RoleCode.ESTUDIANTE 
+                  ? 'Tu registro de alumno se está preparando. Cierra sesión y vuelve a entrar; si persiste, avisa a la Oficina de Psicología.'
+                  : 'No hay alumnos registrados en el sistema para simular la vista.'}
               </div>
             )
           ) : (
+            // VISTA DE PERSONAL CLÍNICO / ADMIN
             <>
               {activeView === 'PANEL_PRINCIPAL' && (
                 <DashboardView
@@ -1144,7 +1113,7 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
 
               {activeView === 'EXPEDIENTE_UNICO' &&
                 (!selectedClinicalCase || !selectedStudent ? (
-                  <div className="p-6 text-sm text-slate-600 bg-white border border-slate-200 rounded-xl">
+                  <div className="p-6 text-sm text-[#4A6B53] bg-white border border-[#E8E2D5] rounded-xl">
                     Aún no hay expedientes disponibles para tu cuenta.
                   </div>
                 ) : (
@@ -1216,7 +1185,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
 function AuthGate() {
   const { status, profile, signOut } = useAuth();
   if (status !== 'READY' || !profile) return <LoginScreen />;
-  // key = id: al cambiar de cuenta se reinicia todo el estado en memoria (sin mezclar datos entre sesiones)
   return <AppShell key={profile.id} authUser={profile} onSignOut={signOut} />;
 }
 
