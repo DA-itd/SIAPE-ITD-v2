@@ -119,15 +119,41 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
 
   const persistStudentRecord = async (s: StudentRecord): Promise<boolean> => {
     if (!supabase) return false;
-    const patch: any = {
-      full_name: s.fullName, program_name: s.programName || 'Sin asignar', academic_department: s.academicDepartment || null,
-      semester: s.semester > 0 ? s.semester : null, group_code: s.group || null, entry_generation: s.entryGeneration || null,
-      gender: s.gender ?? null, age: s.age ?? null, phone: s.phone ?? null, current_address: s.currentAddress ?? null,
-      marital_status: s.maritalStatus ?? null, origin_city: s.originCity ?? null,
+    
+    // Convertir fecha DD/MM/AAAA a AAAA-MM-DD para la base de datos
+    let formattedBirthDate = null;
+    if (s.birthDate) {
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(s.birthDate)) {
+        const [day, month, year] = s.birthDate.split('/');
+        formattedBirthDate = `${year}-${month}-${day}`;
+      } else if (/^\d{4}-\d{2}-\d{2}$/.test(s.birthDate)) {
+        formattedBirthDate = s.birthDate;
+      }
+    }
+
+    const patch: Record<string, unknown> = {
+      full_name: s.fullName, 
+      program_name: s.programName || 'Sin asignar',
+      academic_department: s.academicDepartment || null, 
+      semester: s.semester > 0 ? s.semester : null,
+      group_code: s.group || null, 
+      entry_generation: s.entryGeneration || null,
+      gender: s.gender ?? null, 
+      age: s.age ?? null, 
+      phone: s.phone ?? null,
+      current_address: s.currentAddress ?? null, 
+      marital_status: s.maritalStatus ?? null,
+      origin_city: s.originCity ?? null,
+      emergency_contact: s.emergencyContact ?? null, // Aseguramos que se guarde
     };
-    if (s.birthDate && /^\d{4}-\d{2}-\d{2}$/.test(s.birthDate)) patch.birth_date = s.birthDate;
+
+    if (formattedBirthDate) patch.birth_date = formattedBirthDate;
+
     const { data, error } = await supabase.from('students').update(patch).eq('id', s.id).select('id');
-    if (error || !data?.length) { window.alert(`No se pudo guardar: ${error?.message}`); return false; }
+    if (error || !data?.length) {
+      window.alert(`No se pudo guardar tu información: ${error?.message ?? 'sin permiso'}`);
+      return false;
+    }
     return true;
   };
 
@@ -340,9 +366,23 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
               if (!(await persistStudentRecord(updated))) return;
               setStudents((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
             }}
-            onSubmitAssessment={(instrumentCode, responses) => {
-              if (!targetCase) { alert("Error: El alumno no tiene un expediente clínico abierto. Contacta a Psicología."); return; }
-              handleCreateConsultationAssessment({ clinicalCaseId: targetCase.id, studentId: targetStudent.id, instrumentCode, applicationContextNote: `Cuestionario autoadministrado`, responses, professionalInterpretation: '', overridePriority: null, overrideReason: '', nextFollowUpAction: 'Revisión inicial', nextFollowUpDate: new Date().toISOString().slice(0, 10) });
+                        onSubmitAssessment={(instrumentCode, responses) => {
+              // Si no hay expediente, usamos un ID temporal para que se guarde la evaluación
+              // y el psicólogo pueda vincularla después.
+              const caseId = targetCase ? targetCase.id : `temp-case-${targetStudent.id}`;
+              
+              handleCreateConsultationAssessment({
+                clinicalCaseId: caseId,
+                studentId: targetStudent.id,
+                instrumentCode,
+                applicationContextNote: `Cuestionario autoadministrado`,
+                responses,
+                professionalInterpretation: '',
+                overridePriority: null,
+                overrideReason: '',
+                nextFollowUpAction: 'Revisión inicial',
+                nextFollowUpDate: new Date().toISOString().slice(0, 10),
+              });
             }}
             onLogoutOrSwitchRole={onSignOut}
           />
