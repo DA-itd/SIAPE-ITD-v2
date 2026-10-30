@@ -151,16 +151,19 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   };
 
   const handleSendAssessment = (inst: InstrumentCode) => {
-    const responses = inst === InstrumentCode.BAI ? baiResponses : bdiResponses;
+  const responses = inst === InstrumentCode.BAI ? baiResponses : bdiResponses;
     
     if (Object.keys(responses).length < 21) {
       alert('Por favor responde todos los reactivos antes de enviar.');
       return;
     }
 
+    // ✨ AQUÍ SE REPRODUCE LA NOTA MUSICAL ✨
+    playRelaxingChime();
+
     setSubmittedInstrument(inst);
     onSubmitAssessment(inst, responses);
-    setTimeout(() => setSubmittedInstrument(null), 8000); // El mensaje de éxito dura 8 segundos
+    setTimeout(() => setSubmittedInstrument(null), 8000); 
   };
 
   const getOptionLabel = (inst: InstrumentCode, val: number) => {
