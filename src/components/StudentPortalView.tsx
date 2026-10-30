@@ -44,7 +44,6 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   onSubmitAssessment,
   onLogoutOrSwitchRole,
 }) => {
-  // Lógica para saber si el alumno ya completó sus datos
   const isDataLocked = useMemo(() => {
     return Boolean(
       student.fullName?.trim() &&
@@ -60,25 +59,20 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     );
   }, [student]);
 
-  // Si los datos ya están bloqueados, iniciamos directamente en el Cuestionario 1 (BAI).
-  // Si no, iniciamos en la Ficha de Datos.
   const [activeTab, setActiveTab] = useState<'FICHA_DATOS' | 'BAI' | 'BDI' | 'ESTADO'>(
     isDataLocked ? 'BAI' : 'FICHA_DATOS'
   );
 
-  // Efecto por si el alumno llena los datos mientras está en la pantalla, 
-  // al guardar, la pestaña desaparezca y lo mande a los cuestionarios.
   useEffect(() => {
     if (isDataLocked && activeTab === 'FICHA_DATOS') {
       setActiveTab('BAI');
     }
   }, [isDataLocked, activeTab]);
 
-  // Formulario editable de datos personales y psicopedagógicos del alumno
   const [formData, setFormData] = useState<StudentRecord>({ ...student });
   const [savedPersonalDataBanner, setSavedPersonalDataBanner] = useState<boolean>(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  // Estados de cuestionarios interactivos
   const [baiResponses, setBaiResponses] = useState<Record<number, number>>(() => {
     const existing = assessments.find(
       (a) => a.studentId === student.id && a.instrumentCode === InstrumentCode.BAI
@@ -108,18 +102,31 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   const baiAnsweredCount = Object.keys(baiResponses).length;
   const bdiAnsweredCount = Object.keys(bdiResponses).length;
 
-  const handleSavePersonalData = (e: React.FormEvent) => {
+  const handleSavePersonalData = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isDataLocked) return; // Seguridad extra
-    onUpdateStudentRecord(formData);
-    setSavedPersonalDataBanner(true);
-    setTimeout(() => setSavedPersonalDataBanner(false), 5000);
+    if (isDataLocked) return;
+    
+    try {
+      setFormError(null);
+      await onUpdateStudentRecord(formData);
+      setSavedPersonalDataBanner(true);
+      setTimeout(() => setSavedPersonalDataBanner(false), 5000);
+    } catch (err: any) {
+      setFormError('Hubo un problema al guardar. Revisa tu conexión a internet e intenta de nuevo.');
+    }
   };
 
   const handleSendAssessment = (inst: InstrumentCode) => {
     const responses = inst === InstrumentCode.BAI ? baiResponses : bdiResponses;
-    onSubmitAssessment(inst, responses);
+    
+    // Validación rápida antes de enviar
+    if (Object.keys(responses).length < 21) {
+      alert('Por favor responde todos los reactivos antes de enviar.');
+      return;
+    }
+
     setSubmittedInstrument(inst);
+    onSubmitAssessment(inst, responses);
     setTimeout(() => setSubmittedInstrument(null), 6000);
   };
 
@@ -137,7 +144,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12">
+    <div className="space-y-6 max-w-5xl mx-auto pb-24">
       {/* ENCABEZADO INSTITUCIONAL PARA EL ESTUDIANTE */}
       <div className="bg-white border border-[#E8E2D5] rounded-2xl shadow-sm overflow-hidden">
         <div className="bg-[#A3C9A8] text-[#2F3E32] p-6 sm:p-8">
@@ -161,36 +168,31 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               <div>
                 Carrera: <strong className="text-[#2F3E32]">{student.programName}</strong>
               </div>
-              <div>
-                Cuenta Google / Gmail: <strong className="text-[#2F3E32] font-mono">{currentUser.email}</strong>
-              </div>
             </div>
           </div>
         </div>
 
-        {/* CINTILLO ÉTICO Y DE CONFIDENCIALIDAD */}
-        <div className="bg-[#F4F0E6] border-b border-[#E8E2D5] px-6 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs text-[#4A6B53]">
+        {/* CINTILLO ÉTICO Y BOTÓN DE SALIR VISUAL */}
+        <div className="bg-[#F4F0E6] border-b border-[#E8E2D5] px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-[#4A6B53]">
           <div className="flex items-center gap-2">
             <Lock className="w-4 h-4 text-[#4A6B53] shrink-0" />
             <span>
-              <strong>Confidencialidad Garantizada:</strong> Tus respuestas solo son accesibles por la Oficina de Psicología del ITD.
+              <strong>Confidencialidad:</strong> Tus respuestas solo las ve Psicología ITD.
             </span>
           </div>
           {onLogoutOrSwitchRole && (
             <button
               onClick={onLogoutOrSwitchRole}
-              className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-[#E8E2D5] hover:bg-[#FDFBF7] rounded-lg text-[11px] font-bold text-[#4A6B53] cursor-pointer transition-colors"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white border-2 border-rose-200 hover:border-rose-400 hover:bg-rose-50 rounded-xl text-xs font-bold text-rose-700 cursor-pointer transition-all shadow-sm w-full sm:w-auto"
             >
-              <LogOut className="w-3.5 h-3.5" />
-              Cambiar de Perfil / Salir
+              <LogOut className="w-4 h-4" />
+              Cerrar Sesión / Salir
             </button>
           )}
         </div>
 
-        {/* NAVEGACIÓN DE PESTAÑAS DEL ESTUDIANTE */}
+        {/* NAVEGACIÓN DE PESTAÑAS */}
         <div className="flex border-b border-[#E8E2D5] bg-[#FDFBF7] p-2 gap-2 overflow-x-auto text-xs">
-          
-          {/* PESTAÑA 1: SOLO SE MUESTRA SI LOS DATOS AÚN NO ESTÁN BLOQUEADOS */}
           {!isDataLocked && (
             <button
               onClick={() => setActiveTab('FICHA_DATOS')}
@@ -201,10 +203,9 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               }`}
             >
               <User className="w-4 h-4" />
-              1. Mi Ficha de Datos Personales
+              1. Mis Datos
             </button>
           )}
-
           <button
             onClick={() => setActiveTab('BAI')}
             className={`px-4 py-2.5 rounded-xl font-bold cursor-pointer transition-colors inline-flex items-center gap-2 whitespace-nowrap ${
@@ -214,7 +215,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             }`}
           >
             <ClipboardCheck className="w-4 h-4" />
-            {isDataLocked ? '1.' : '2.'} Cuestionario 1 (Sensaciones Físicas y Nerviosismo)
+            {isDataLocked ? '1.' : '2.'} Cuestionario 1
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
                 baiExisting || baiAnsweredCount === 21
@@ -222,10 +223,9 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   : 'bg-amber-100 text-amber-900'
               }`}
             >
-              {baiExisting || baiAnsweredCount === 21 ? 'Completado' : `${baiAnsweredCount}/21`}
+              {baiExisting || baiAnsweredCount === 21 ? 'OK' : `${baiAnsweredCount}/21`}
             </span>
           </button>
-          
           <button
             onClick={() => setActiveTab('BDI')}
             className={`px-4 py-2.5 rounded-xl font-bold cursor-pointer transition-colors inline-flex items-center gap-2 whitespace-nowrap ${
@@ -235,7 +235,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             }`}
           >
             <FileText className="w-4 h-4" />
-            {isDataLocked ? '2.' : '3.'} Cuestionario 2 (Estado de Ánimo y Pensamientos)
+            {isDataLocked ? '2.' : '3.'} Cuestionario 2
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
                 bdiExisting || bdiAnsweredCount === 21
@@ -243,52 +243,40 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   : 'bg-amber-100 text-amber-900'
               }`}
             >
-              {bdiExisting || bdiAnsweredCount === 21 ? 'Completado' : `${bdiAnsweredCount}/21`}
+              {bdiExisting || bdiAnsweredCount === 21 ? 'OK' : `${bdiAnsweredCount}/21`}
             </span>
-          </button>
-          
-          <button
-            onClick={() => setActiveTab('ESTADO')}
-            className={`px-4 py-2.5 rounded-xl font-bold cursor-pointer transition-colors inline-flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'ESTADO'
-                ? 'bg-[#4A6B53] text-white shadow-sm'
-                : 'text-[#4A6B53] hover:bg-[#E8E2D5]'
-            }`}
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            {isDataLocked ? '3.' : '4.'} Estado de Mis Evaluaciones
           </button>
         </div>
       </div>
 
-      {/* PESTAÑA 1: FICHA DE DATOS PERSONALES (Solo se renderiza si no está bloqueada) */}
+      {/* PESTAÑA 1: FICHA DE DATOS PERSONALES */}
       {!isDataLocked && activeTab === 'FICHA_DATOS' && (
-        <form onSubmit={handleSavePersonalData} className="bg-white border border-[#E8E2D5] rounded-2xl p-6 sm:p-8 space-y-6">
+        <form onSubmit={handleSavePersonalData} className="bg-white border border-[#E8E2D5] rounded-2xl p-4 sm:p-8 space-y-6">
           <div className="border-b border-[#E8E2D5] pb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-[#2F3E32] flex items-center gap-2">
                 <User className="w-5 h-5 text-[#4A6B53]" />
-                Ficha de Datos Personales y Psicopedagógicos
+                Ficha de Datos Personales
               </h2>
               <p className="text-xs text-[#4A6B53] mt-1">
-                Completa y verifica tu información para que la Oficina de Psicología pueda brindarte el acompañamiento adecuado durante tu estancia en el ITD.
+                Completa tu información para el acompañamiento psicológico.
               </p>
             </div>
-            <button
-              type="submit"
-              className="px-4 py-2 text-xs font-bold text-white bg-[#4A6B53] hover:bg-[#3B5743] rounded-xl shadow-sm cursor-pointer inline-flex items-center gap-2 self-start sm:self-auto"
-            >
-              <Save className="w-4 h-4" />
-              Guardar Mi Ficha
-            </button>
           </div>
 
           {savedPersonalDataBanner && (
             <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center gap-3 text-xs text-emerald-900">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
               <div>
-                <strong>¡Datos guardados con éxito!</strong> Tu ficha ha sido actualizada.
+                <strong>¡Datos guardados!</strong> Ahora puedes responder los cuestionarios.
               </div>
+            </div>
+          )}
+
+          {formError && (
+            <div className="p-4 bg-rose-50 border border-rose-300 rounded-xl flex items-center gap-3 text-xs text-rose-900">
+              <Lock className="w-5 h-5 text-rose-600 shrink-0" />
+              <div>{formError}</div>
             </div>
           )}
 
@@ -320,19 +308,18 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                 />
               </div>
               <div>
-                <label className="block font-semibold text-[#3B4A3F] mb-1">Correo Institucional / Contacto *</label>
+                <label className="block font-semibold text-[#3B4A3F] mb-1">Correo Institucional *</label>
                 <input
                   type="email"
                   required
                   value={formData.institutionalEmail}
                   onChange={(e) => setFormData({ ...formData, institutionalEmail: e.target.value })}
                   className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
-                  placeholder="ejemplo@itdurango.edu.mx o @gmail.com"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div>
                 <label className="block font-semibold text-[#3B4A3F] mb-1">Carrera ITD</label>
                 <input
@@ -353,16 +340,6 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                 />
               </div>
-              <div>
-                <label className="block font-semibold text-[#3B4A3F] mb-1">Grupo</label>
-                <input
-                  type="text"
-                  value={formData.group || ''}
-                  onChange={(e) => setFormData({ ...formData, group: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
-                  placeholder="Ej. 1A, 2B"
-                />
-              </div>
             </div>
           </fieldset>
 
@@ -371,7 +348,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             <h3 className="text-xs font-bold uppercase tracking-wider text-[#4A6B53] font-mono">
               B. Datos Sociodemográficos y Contacto
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div>
                 <label className="block font-semibold text-[#3B4A3F] mb-1">Edad *</label>
                 <input
@@ -408,7 +385,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                 </select>
               </div>
               <div>
-                <label className="block font-semibold text-[#3B4A3F] mb-1">Teléfono Móvil / WhatsApp *</label>
+                <label className="block font-semibold text-[#3B4A3F] mb-1">Teléfono Móvil *</label>
                 <input
                   type="text"
                   required
@@ -420,7 +397,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div className="grid grid-cols-1 gap-4 text-xs">
               <div>
                 <label className="block font-semibold text-[#3B4A3F] mb-1">Ciudad o Localidad de Origen *</label>
                 <input
@@ -428,7 +405,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   required
                   value={formData.originCity || ''}
                   onChange={(e) => setFormData({ ...formData, originCity: e.target.value })}
-                  placeholder="Ej. Durango, Dgo. / Santiago Papasquiaro"
+                  placeholder="Ej. Durango, Dgo."
                   className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                 />
               </div>
@@ -443,131 +420,51 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                 />
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div>
                 <label className="block font-semibold text-[#3B4A3F] mb-1">
-                  Contacto de Emergencia (Nombre y Parentesco) *
+                  Contacto de Emergencia (Nombre y Teléfono) *
                 </label>
                 <input
                   type="text"
                   required
                   value={formData.emergencyContact || ''}
                   onChange={(e) => setFormData({ ...formData, emergencyContact: e.target.value })}
-                  placeholder="Ej. María Soto (Mamá) / Tel: 618..."
+                  placeholder="Ej. María Soto (Mamá) / 618..."
                   className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
                 />
               </div>
-              <div>
-                <label className="block font-semibold text-[#3B4A3F] mb-1">
-                  ¿Cuentas con equipo de cómputo e internet en casa?
-                </label>
-                <select
-                  value={formData.computerAccess || 'Si'}
-                  onChange={(e) => setFormData({ ...formData, computerAccess: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
-                >
-                  <option value="Si">Sí, cuento con ambos</option>
-                  <option value="Solo internet">Solo internet (sin computadora propia)</option>
-                  <option value="Solo computadora">Solo computadora (sin internet fijo)</option>
-                  <option value="No">No cuento con ninguno de los dos</option>
-                </select>
-              </div>
-            </div>
-          </fieldset>
-
-          {/* SECCIÓN C: HÁBITOS DE ESTUDIO Y SALUD */}
-          <fieldset className="space-y-4 pt-4 border-t border-[#E8E2D5]">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-[#4A6B53] font-mono">
-              C. Hábitos Académicos y Salud
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-              <div>
-                <label className="block font-semibold text-[#3B4A3F] mb-1">Horas de Estudio al Día (fuera de clase)</label>
-                <select
-                  value={formData.studyHours || '1 1/2 Hora a 2 Horas'}
-                  onChange={(e) => setFormData({ ...formData, studyHours: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
-                >
-                  <option value="Menos de 1 hora">Menos de 1 hora</option>
-                  <option value="1 1/2 Hora a 2 Horas">1 1/2 Hora a 2 Horas</option>
-                  <option value="3 a 4 horas">3 a 4 horas</option>
-                  <option value="Más de 4 horas">Más de 4 horas</option>
-                </select>
-              </div>
-              <div>
-                <label className="block font-semibold text-[#3B4A3F] mb-1">Horas de Sueño Habitual</label>
-                <select
-                  value={formData.sleepHours || '6 a 8 horas'}
-                  onChange={(e) => setFormData({ ...formData, sleepHours: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
-                >
-                  <option value="Menos de 5 horas">Menos de 5 horas</option>
-                  <option value="6 a 8 horas">6 a 8 horas (Recomendado)</option>
-                  <option value="Más de 8 horas">Más de 8 horas</option>
-                </select>
-              </div>
-              <div>
-                <label className="block font-semibold text-[#3B4A3F] mb-1">¿Has recibido terapia psicológica antes?</label>
-                <select
-                  value={formData.previousPsychologicalTherapy || 'No'}
-                  onChange={(e) =>
-                    setFormData({ ...formData, previousPsychologicalTherapy: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
-                >
-                  <option value="No">No, nunca</option>
-                  <option value="Sí">Sí, anteriormente</option>
-                  <option value="Actualmente">Actualmente me encuentro en proceso</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-[#3B4A3F] mb-1">Tus Hábitos Principales de Estudio</label>
-              <textarea
-                rows={2}
-                value={formData.studyHabits || ''}
-                onChange={(e) => setFormData({ ...formData, studyHabits: e.target.value })}
-                placeholder="Ej. Tomar apuntes en clase, realizar resúmenes, mapas mentales, estudio en grupo..."
-                className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] text-xs focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
-              />
             </div>
           </fieldset>
 
           <div className="pt-4 border-t border-[#E8E2D5] flex justify-end">
             <button
               type="submit"
-              className="px-6 py-2.5 text-xs font-bold text-white bg-[#4A6B53] hover:bg-[#3B5743] rounded-xl shadow-sm cursor-pointer inline-flex items-center gap-2"
+              className="w-full sm:w-auto px-6 py-3 text-sm font-bold text-white bg-[#4A6B53] hover:bg-[#3B5743] rounded-xl shadow-sm cursor-pointer inline-flex items-center justify-center gap-2"
             >
               <Save className="w-4 h-4" />
-              Guardar Mis Datos Personales
+              Guardar Mis Datos
             </button>
           </div>
         </form>
       )}
-            {/* PESTAÑA 2: CUESTIONARIO 1 (BAI - ANSIEDAD / SENSACIONES FÍSICAS) */}
+            {/* PESTAÑA 2: CUESTIONARIO 1 (BAI) */}
       {activeTab === 'BAI' && (
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-6 sm:p-8 space-y-6">
+        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-4 sm:p-8 space-y-6">
           <div className="border-b border-[#E8E2D5] pb-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <span className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-[#A3C9A8] text-[#2F3E32]">
-                  {isDataLocked ? 'Cuestionario 1 de 2' : 'Cuestionario 1 de 2'}
+                  Cuestionario 1 de 2
                 </span>
                 <h2 className="text-xl font-bold text-[#2F3E32] mt-2">
-                  Cuestionario de Sensaciones Físicas y Nerviosismo
+                  Sensaciones Físicas y Nerviosismo
                 </h2>
-                <p className="text-xs text-[#4A6B53] mt-1 max-w-2xl">
-                  Indica qué tanto te han molestado o preocupado los siguientes síntomas durante la última semana, incluyendo el día de hoy.
-                </p>
               </div>
-              <div className="text-right">
+              <div className="text-left sm:text-right">
                 <div className="text-xs font-mono font-bold text-[#4A6B53]">
                   {baiAnsweredCount} de 21 respondidos
                 </div>
-                <div className="w-32 h-2 bg-[#E8E2D5] rounded-full mt-1 overflow-hidden">
+                <div className="w-full sm:w-32 h-2 bg-[#E8E2D5] rounded-full mt-1 overflow-hidden">
                   <div
                     className="h-full bg-[#4A6B53] transition-all"
                     style={{ width: `${(baiAnsweredCount / 21) * 100}%` }}
@@ -578,16 +475,16 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
           </div>
 
           {submittedInstrument === InstrumentCode.BAI && (
-            <div className="p-4 bg-emerald-50 border-2 border-emerald-500 rounded-xl flex items-center justify-between gap-4 text-xs text-emerald-950">
+            <div className="p-4 bg-emerald-50 border-2 border-emerald-500 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-emerald-950">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                <span>
-                  <strong>¡Muchas gracias!</strong> Tus respuestas del Cuestionario 1 fueron enviadas con éxito.
+                <span className="text-center sm:text-left">
+                  <strong>¡Enviado con éxito!</strong> Tus respuestas del Cuestionario 1 fueron recibidas.
                 </span>
               </div>
               <button
                 onClick={() => setActiveTab('BDI')}
-                className="px-3 py-1.5 font-bold text-white bg-[#4A6B53] rounded-lg cursor-pointer whitespace-nowrap"
+                className="w-full sm:w-auto px-4 py-2 font-bold text-white bg-[#4A6B53] rounded-lg cursor-pointer whitespace-nowrap"
               >
                 Ir al Cuestionario 2 ➔
               </button>
@@ -611,7 +508,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                     <span className="font-mono text-[#A3C9A8] mr-2">{item.itemNumber}.</span>
                     {item.placeholderLabel}
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
+                  {/* OPCIONES EN COLUMNA EN MÓVIL, FILA EN PC */}
+                  <div className="flex flex-col sm:grid sm:grid-cols-4 gap-2 text-xs">
                     {[0, 1, 2, 3].map((val) => (
                       <button
                         key={val}
@@ -619,7 +517,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                         onClick={() =>
                           setBaiResponses((prev) => ({ ...prev, [item.itemNumber]: val }))
                         }
-                        className={`p-2.5 rounded-lg border text-left cursor-pointer transition-all ${
+                        className={`w-full p-3 rounded-lg border text-left cursor-pointer transition-all ${
                           currentVal === val
                             ? 'bg-[#4A6B53] text-white border-[#4A6B53] font-bold shadow-sm'
                             : 'bg-[#FDFBF7] text-[#4A6B53] border-[#E8E2D5] hover:bg-[#F4F0E6]'
@@ -634,46 +532,44 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             })}
           </div>
 
-          <div className="pt-4 border-t border-[#E8E2D5] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="text-xs text-[#4A6B53]">
+          {/* BOTÓN FLOTANTE / FIJO PARA ENVIAR */}
+          <div className="sticky bottom-4 pt-4 mt-6 border-t border-[#E8E2D5] bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-between gap-3 z-10">
+            <div className="text-xs text-[#4A6B53] font-bold">
               {baiAnsweredCount === 21
-                ? '✅ Has respondido los 21 puntos. Ya puedes enviar tus respuestas.'
-                : `Faltan ${21 - baiAnsweredCount} preguntas por responder.`}
+                ? '✅ Todo listo para enviar.'
+                : `Faltan ${21 - baiAnsweredCount} preguntas.`}
             </div>
             <button
               type="button"
-              disabled={baiAnsweredCount === 0}
+              disabled={baiAnsweredCount < 21}
               onClick={() => handleSendAssessment(InstrumentCode.BAI)}
-              className="px-6 py-2.5 text-xs font-bold text-white bg-[#4A6B53] hover:bg-[#3B5743] disabled:opacity-50 rounded-xl shadow-sm cursor-pointer inline-flex items-center gap-2 self-end"
+              className="w-full sm:w-auto px-6 py-3.5 text-sm font-bold text-white bg-[#4A6B53] hover:bg-[#3B5743] disabled:opacity-50 disabled:cursor-not-allowed rounded-xl shadow-md cursor-pointer inline-flex items-center justify-center gap-2 transition-all"
             >
               <Send className="w-4 h-4" />
-              Enviar Cuestionario 1 a Psicología ITD
+              Enviar Cuestionario 1
             </button>
           </div>
         </div>
       )}
 
-      {/* PESTAÑA 3: CUESTIONARIO 2 (BDI - ESTADO DE ÁNIMO Y PENSAMIENTOS) */}
+      {/* PESTAÑA 3: CUESTIONARIO 2 (BDI) */}
       {activeTab === 'BDI' && (
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-6 sm:p-8 space-y-6">
+        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-4 sm:p-8 space-y-6">
           <div className="border-b border-[#E8E2D5] pb-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <span className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-[#A3C9A8] text-[#2F3E32]">
-                  {isDataLocked ? 'Cuestionario 2 de 2' : 'Cuestionario 2 de 2'}
+                  Cuestionario 2 de 2
                 </span>
                 <h2 className="text-xl font-bold text-[#2F3E32] mt-2">
-                  Cuestionario de Estado de Ánimo y Pensamientos
+                  Estado de Ánimo y Pensamientos
                 </h2>
-                <p className="text-xs text-[#4A6B53] mt-1 max-w-2xl">
-                  Selecciona la opción que mejor describa cómo te has sentido durante las últimas dos semanas.
-                </p>
               </div>
-              <div className="text-right">
+              <div className="text-left sm:text-right">
                 <div className="text-xs font-mono font-bold text-[#4A6B53]">
                   {bdiAnsweredCount} de 21 respondidos
                 </div>
-                <div className="w-32 h-2 bg-[#E8E2D5] rounded-full mt-1 overflow-hidden">
+                <div className="w-full sm:w-32 h-2 bg-[#E8E2D5] rounded-full mt-1 overflow-hidden">
                   <div
                     className="h-full bg-[#4A6B53] transition-all"
                     style={{ width: `${(bdiAnsweredCount / 21) * 100}%` }}
@@ -684,18 +580,18 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
           </div>
 
           {submittedInstrument === InstrumentCode.BDI && (
-            <div className="p-4 bg-emerald-50 border-2 border-emerald-500 rounded-xl flex items-center justify-between gap-4 text-xs text-emerald-950">
+            <div className="p-4 bg-emerald-50 border-2 border-emerald-500 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-emerald-950">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                <span>
-                  <strong>¡Excelente trabajo!</strong> Has completado y enviado el Cuestionario 2.
+                <span className="text-center sm:text-left">
+                  <strong>¡Enviado con éxito!</strong> Has completado el Cuestionario 2.
                 </span>
               </div>
               <button
                 onClick={() => setActiveTab('ESTADO')}
-                className="px-3 py-1.5 font-bold text-white bg-[#4A6B53] rounded-lg cursor-pointer whitespace-nowrap"
+                className="w-full sm:w-auto px-4 py-2 font-bold text-white bg-[#4A6B53] rounded-lg cursor-pointer whitespace-nowrap"
               >
-                Ver Estado Final ➔
+                Ver mi Estado Final ➔
               </button>
             </div>
           )}
@@ -717,7 +613,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                     <span className="font-mono text-[#A3C9A8] mr-2">{item.itemNumber}.</span>
                     {item.placeholderLabel}
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
+                  {/* OPCIONES EN COLUMNA EN MÓVIL, FILA EN PC */}
+                  <div className="flex flex-col sm:grid sm:grid-cols-4 gap-2 text-xs">
                     {[0, 1, 2, 3].map((val) => (
                       <button
                         key={val}
@@ -725,7 +622,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                         onClick={() =>
                           setBdiResponses((prev) => ({ ...prev, [item.itemNumber]: val }))
                         }
-                        className={`p-2.5 rounded-lg border text-left cursor-pointer transition-all ${
+                        className={`w-full p-3 rounded-lg border text-left cursor-pointer transition-all ${
                           currentVal === val
                             ? 'bg-[#4A6B53] text-white border-[#4A6B53] font-bold shadow-sm'
                             : 'bg-[#FDFBF7] text-[#4A6B53] border-[#E8E2D5] hover:bg-[#F4F0E6]'
@@ -740,109 +637,69 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             })}
           </div>
 
-          <div className="pt-4 border-t border-[#E8E2D5] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="text-xs text-[#4A6B53]">
+          {/* BOTÓN FLOTANTE / FIJO PARA ENVIAR */}
+          <div className="sticky bottom-4 pt-4 mt-6 border-t border-[#E8E2D5] bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-between gap-3 z-10">
+            <div className="text-xs text-[#4A6B53] font-bold">
               {bdiAnsweredCount === 21
-                ? '✅ Has respondido los 21 puntos del Cuestionario 2.'
-                : `Faltan ${21 - bdiAnsweredCount} preguntas por responder.`}
+                ? '✅ Todo listo para enviar.'
+                : `Faltan ${21 - bdiAnsweredCount} preguntas.`}
             </div>
             <button
               type="button"
-              disabled={bdiAnsweredCount === 0}
+              disabled={bdiAnsweredCount < 21}
               onClick={() => handleSendAssessment(InstrumentCode.BDI)}
-              className="px-6 py-2.5 text-xs font-bold text-white bg-[#4A6B53] hover:bg-[#3B5743] disabled:opacity-50 rounded-xl shadow-sm cursor-pointer inline-flex items-center gap-2 self-end"
+              className="w-full sm:w-auto px-6 py-3.5 text-sm font-bold text-white bg-[#4A6B53] hover:bg-[#3B5743] disabled:opacity-50 disabled:cursor-not-allowed rounded-xl shadow-md cursor-pointer inline-flex items-center justify-center gap-2 transition-all"
             >
               <Send className="w-4 h-4" />
-              Enviar Cuestionario 2 a Psicología ITD
+              Enviar Cuestionario 2
             </button>
           </div>
         </div>
       )}
 
-      {/* PESTAÑA 4: ESTADO DE MIS EVALUACIONES */}
+      {/* PESTAÑA 4: ESTADO FINAL */}
       {activeTab === 'ESTADO' && (
-        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-6 sm:p-8 space-y-6">
+        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-4 sm:p-8 space-y-6">
           <div className="border-b border-[#E8E2D5] pb-4">
             <h2 className="text-xl font-bold text-[#2F3E32] flex items-center gap-2">
               <CheckCircle2 className="w-6 h-6 text-[#4A6B53]" />
-              Estado de tus Cuestionarios y Acompañamiento
+              Estado de tus Evaluaciones
             </h2>
-            <p className="text-xs text-[#4A6B53] mt-1">
-              Aquí puedes verificar la recepción de tus formularios por parte de la Oficina de Psicología del ITD.
-            </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Tarjeta Cuestionario 1 */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="p-5 border border-[#E8E2D5] rounded-xl bg-[#FDFBF7] space-y-3">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-sm text-[#2F3E32]">
-                  1. Cuestionario de Sensaciones Físicas (BAI)
-                </span>
-                <span
-                  className={`px-2.5 py-1 text-xs font-bold rounded-full ${
-                    baiExisting || baiAnsweredCount === 21
-                      ? 'bg-[#A3C9A8] text-[#2F3E32]'
-                      : 'bg-amber-100 text-amber-900'
-                  }`}
-                >
+                <span className="font-bold text-sm text-[#2F3E32]">1. Sensaciones Físicas (BAI)</span>
+                <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${baiExisting || baiAnsweredCount === 21 ? 'bg-[#A3C9A8] text-[#2F3E32]' : 'bg-amber-100 text-amber-900'}`}>
                   {baiExisting || baiAnsweredCount === 21 ? 'Completado' : 'Pendiente'}
                 </span>
               </div>
               <p className="text-xs text-[#4A6B53]">
-                {baiExisting || baiAnsweredCount === 21
-                  ? 'Tus respuestas han sido recibidas y procesadas confidencialmente.'
-                  : 'Aún no completas este cuestionario. Te invitamos a responderlo.'}
+                {baiExisting ? 'Tus respuestas han sido recibidas y procesadas confidencialmente.' : 'Aún no envías este cuestionario.'}
               </p>
-              {(!baiExisting && baiAnsweredCount < 21) && (
-                <button
-                  onClick={() => setActiveTab('BAI')}
-                  className="px-3 py-1.5 text-xs font-semibold text-white bg-[#4A6B53] hover:bg-[#3B5743] rounded-lg cursor-pointer"
-                >
-                  Responder Cuestionario 1
-                </button>
-              )}
             </div>
 
-            {/* Tarjeta Cuestionario 2 */}
             <div className="p-5 border border-[#E8E2D5] rounded-xl bg-[#FDFBF7] space-y-3">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-sm text-[#2F3E32]">
-                  2. Cuestionario de Estado de Ánimo (BDI)
-                </span>
-                <span
-                  className={`px-2.5 py-1 text-xs font-bold rounded-full ${
-                    bdiExisting || bdiAnsweredCount === 21
-                      ? 'bg-[#A3C9A8] text-[#2F3E32]'
-                      : 'bg-amber-100 text-amber-900'
-                  }`}
-                >
+                <span className="font-bold text-sm text-[#2F3E32]">2. Estado de Ánimo (BDI)</span>
+                <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${bdiExisting || bdiAnsweredCount === 21 ? 'bg-[#A3C9A8] text-[#2F3E32]' : 'bg-amber-100 text-amber-900'}`}>
                   {bdiExisting || bdiAnsweredCount === 21 ? 'Completado' : 'Pendiente'}
                 </span>
               </div>
               <p className="text-xs text-[#4A6B53]">
-                {bdiExisting || bdiAnsweredCount === 21
-                  ? 'Tus respuestas han sido recibidas y procesadas confidencialmente.'
-                  : 'Aún no completas este cuestionario. Te invitamos a responderlo.'}
+                {bdiExisting ? 'Tus respuestas han sido recibidas y procesadas confidencialmente.' : 'Aún no envías este cuestionario.'}
               </p>
-              {(!bdiExisting && bdiAnsweredCount < 21) && (
-                <button
-                  onClick={() => setActiveTab('BDI')}
-                  className="px-3 py-1.5 text-xs font-semibold text-white bg-[#4A6B53] hover:bg-[#3B5743] rounded-lg cursor-pointer"
-                >
-                  Responder Cuestionario 2
-                </button>
-              )}
             </div>
           </div>
 
           <div className="p-5 bg-[#F4F0E6] border border-[#E8E2D5] rounded-xl space-y-2 text-xs text-[#3B4A3F]">
             <div className="font-bold flex items-center gap-1.5 text-[#4A6B53]">
               <HeartHandshake className="w-4 h-4" />
-              Oficina de Psicología — Desarrollo Académico ITD
+              Oficina de Psicología
             </div>
             <p className="leading-relaxed">
-              Si en algún momento requieres atención, orientación o acompañamiento individual presencial, acude a la Oficina de Psicología del Instituto Tecnológico de Durango (Edificio de Desarrollo Académico) o comunícate con tu tutor de carrera.
+              Si requieres atención presencial o apoyo, acude al Edificio de Desarrollo Académico del ITD.
             </p>
           </div>
         </div>
