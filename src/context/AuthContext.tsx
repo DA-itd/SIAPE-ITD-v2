@@ -63,7 +63,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setErrorMessage('Faltan VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en el entorno.');
       return;
     }
-    
     if (!session?.user) {
       setProfile(null);
       setBlockedEmail(null);
@@ -72,10 +71,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      const email = (session.user.email ?? '').toLowerCase();
+      // Enlaza la cuenta de Google con su perfil. Para alumnos nuevos (Gmail o institucional)
+      // el servidor crea perfil, registro de alumno y expediente en esta misma llamada.
+      const { data: syncResult, error: syncError } = await supabase.rpc('sync_my_authorization');
+      if (syncError) throw syncError;
 
-      // 1. Buscar si el perfil ya existe
-      const { data: existingProfile, error: profileError } = await supabase
+      const { data: currentProfile, error: profileError } = await supabase
         .from('profiles')
         .select(PROFILE_SELECT)
         .eq('auth_user_id', session.user.id)
@@ -83,42 +84,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (profileError) throw profileError;
 
-      let currentProfile = existingProfile;
-
-      // 2. Si no existe el perfil, lo creamos (Auto-registro)
       if (!currentProfile) {
-        const isStudentDomain = email.endsWith('@itdurango.edu.mx') || email.endsWith('@gmail.com');
-
-        if (isStudentDomain) {
-          const { data: newProfile, error: createError } = await supabase
-            .from('profiles')
-            .insert({
-              auth_user_id: session.user.id,
-              email: email,
-              full_name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || 'Alumno ITD',
-              role_code: RoleCode.ESTUDIANTE,
-              account_status: 'ACTIVA',
-            })
-            .select(PROFILE_SELECT)
-            .single();
-
-          if (createError) {
-            console.error("Error creando perfil de alumno:", createError);
-            throw new Error(`No se pudo crear el perfil del alumno: ${createError.message}`);
-          }
-          currentProfile = newProfile;
-        } else {
-          // Si es personal (no alumno) y no está dado de alta, lo bloqueamos.
-          setBlockedEmail(email);
-          setBlockedReason('El personal debe ser dado de alta previamente por el administrador.');
-          setProfile(null);
-          setStatus('BLOCKED');
-          return;
-        }
+        const email = (session.user.email ?? '').toLowerCase();
+        setBlockedEmail(email);
+        setBlockedReason(
+          syncResult === 'CORREO_EN_USO'
+            ? 'Este correo ya está asociado a otra cuenta. Avisa al administrador.'
+            : 'Este correo no está autorizado. El personal debe ser dado de alta previamente por el administrador.'
+        );
+        setProfile(null);
+        setStatus('BLOCKED');
+        return;
       }
 
-      // 3. Validar que la cuenta esté activa
       const mapped = mapProfileRow(currentProfile);
+      const email = (session.user.email ?? mapped.email).toLowerCase();
 
       if (mapped.status === 'SUSPENDIDA' || mapped.status === 'REVOCADA') {
         setBlockedEmail(email);
@@ -140,9 +120,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setBlockedEmail(null);
       setBlockedReason(null);
       setStatus('READY');
-
     } catch (err: any) {
-      console.error("Error en AuthContext:", err);
+      console.error(err);
       setErrorMessage(err?.message || 'Error desconocido al validar la sesión.');
       setStatus('ERROR');
     }
@@ -154,14 +133,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setErrorMessage('Faltan VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en el entorno.');
       return;
     }
-    
     supabase.auth.getSession().then(({ data }) => resolveSession(data.session));
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'INITIAL_SESSION') return;
       setTimeout(() => resolveSession(session), 0);
     });
-    
     return () => listener.subscription.unsubscribe();
   }, [resolveSession]);
 

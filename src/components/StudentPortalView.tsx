@@ -48,13 +48,24 @@ const playRelaxingChime = () => {
   }
 };
 
+// Calcula la edad a partir de una fecha AAAA-MM-DD
+const calcAge = (iso: string): number => {
+  if (!iso) return 0;
+  const b = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(b.getTime())) return 0;
+  const t = new Date();
+  let age = t.getFullYear() - b.getFullYear();
+  if (t.getMonth() < b.getMonth() || (t.getMonth() === b.getMonth() && t.getDate() < b.getDate())) age--;
+  return age > 0 ? age : 0;
+};
+
 interface StudentPortalViewProps {
   currentUser: UserProfile;
   student: StudentRecord;
   assessments: AssessmentRecord[];
   clinicalCase?: ClinicalCaseRecord;
-  onUpdateStudentRecord: (updated: StudentRecord) => void;
-  onSubmitAssessment: (instrumentCode: InstrumentCode, responses: Record<number, number>) => void;
+  onUpdateStudentRecord: (updated: StudentRecord) => Promise<void>;
+  onSubmitAssessment: (instrumentCode: InstrumentCode, responses: Record<number, number>) => Promise<void>;
   onLogoutOrSwitchRole?: () => void;
 }
 
@@ -71,6 +82,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     return Boolean(
       student.fullName?.trim() &&
       student.matricula?.trim() &&
+      !student.matricula.trim().startsWith('G-') &&
       student.institutionalEmail?.trim() &&
       student.phone?.trim() &&
       student.emergencyContact?.trim() &&
@@ -92,7 +104,14 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     }
   }, [isDataLocked, activeTab]);
 
-  const [formData, setFormData] = useState<StudentRecord>({ ...student });
+  // Las cuentas de Gmail nacen con una matrícula provisional (G-xxxxxxxx): se deja vacía para que el alumno capture la real.
+  const [formData, setFormData] = useState<StudentRecord>({
+    ...student,
+    matricula: student.matricula?.startsWith('G-') ? '' : student.matricula,
+    gender: student.gender ?? '',
+  });
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedPersonalDataBanner, setSavedPersonalDataBanner] = useState<boolean>(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -106,36 +125,49 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
 
   // Encontrar la ÚLTIMA evaluación completada de cada instrumento para mostrarla en el estado
   const lastBai = assessments
-    .filter((a) => a.instrumentCode === InstrumentCode.BAI && a.totalScore !== null)
+    .filter((a) => a.instrumentCode === InstrumentCode.BAI)
     .sort((a, b) => b.appliedAt.localeCompare(a.appliedAt))[0];
     
   const lastBdi = assessments
-    .filter((a) => a.instrumentCode === InstrumentCode.BDI && a.totalScore !== null)
+    .filter((a) => a.instrumentCode === InstrumentCode.BDI)
     .sort((a, b) => b.appliedAt.localeCompare(a.appliedAt))[0];
 
   const baiAnsweredCount = Object.keys(baiResponses).length;
   const bdiAnsweredCount = Object.keys(bdiResponses).length;
 
-    const handleSavePersonalData = async (e: React.FormEvent) => {
+  const handleSavePersonalData = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isDataLocked) return;
-    
-    setFormError(null);
-    await onUpdateStudentRecord(formData); // Si falla, lanza error y no muestra el banner
-    setSavedPersonalDataBanner(true);
-    setTimeout(() => setSavedPersonalDataBanner(false), 5000);
+    try {
+      setFormError(null);
+      await onUpdateStudentRecord(formData);
+      setSavedPersonalDataBanner(true);
+      setTimeout(() => setSavedPersonalDataBanner(false), 5000);
+    } catch (err: any) {
+      console.error('Error al guardar la ficha', err);
+      setFormError(`No se pudo guardar: ${err?.message ?? 'revisa tu conexión'}`);
+    }
   };
 
-  const handleSendAssessment = (inst: InstrumentCode) => {
+  const handleSendAssessment = async (inst: InstrumentCode) => {
     const responses = inst === InstrumentCode.BAI ? baiResponses : bdiResponses;
     if (Object.keys(responses).length < 21) {
-      alert('Por favor responde todos los reactivos antes de enviar.');
+      setSubmitError('Responde todos los reactivos antes de enviar.');
       return;
     }
-    playRelaxingChime();
-    setSubmittedInstrument(inst);
-    onSubmitAssessment(inst, responses);
-    setTimeout(() => setSubmittedInstrument(null), 8000);
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      await onSubmitAssessment(inst, responses);
+      playRelaxingChime();
+      setSubmittedInstrument(inst);
+      setTimeout(() => setSubmittedInstrument(null), 8000);
+    } catch (err: any) {
+      console.error('Error al enviar el cuestionario', err);
+      setSubmitError(`No pudimos guardar tus respuestas: ${err?.message ?? 'revisa tu conexión'}. Siguen en pantalla; inténtalo de nuevo.`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const resetBai = () => setBaiResponses({});
@@ -250,8 +282,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                 <input type="text" required value={formData.matricula} onChange={(e) => setFormData({ ...formData, matricula: e.target.value })} placeholder="Ej. 12345678 o xxx-2026" className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]" />
               </div>
               <div>
-                <label className="block font-semibold text-[#3B4A3F] mb-1">Correo Institucional *</label>
-                <input type="email" required value={formData.institutionalEmail} onChange={(e) => setFormData({ ...formData, institutionalEmail: e.target.value })} className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]" />
+                <label className="block font-semibold text-[#3B4A3F] mb-1">Correo con el que iniciaste sesión</label>
+                <input type="email" value={formData.institutionalEmail} readOnly className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#F4F0E6] text-[#4A6B53] font-mono cursor-not-allowed focus:outline-none" />
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
@@ -275,12 +307,12 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
               <div>
                 <label className="block font-semibold text-[#3B4A3F] mb-1">Fecha de Nacimiento *</label>
-                <input type="text" required value={formData.birthDate || ''} onChange={(e) => setFormData({ ...formData, birthDate: e.target.value })} placeholder="DD/MM/AAAA" className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]" />
+                <input type="date" required value={formData.birthDate || ''} max={new Date().toISOString().split('T')[0]} onChange={(e) => setFormData({ ...formData, birthDate: e.target.value, age: calcAge(e.target.value) })} className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]" />
               </div>
               <div>
                 <label className="block font-semibold text-[#3B4A3F] mb-1">Género *</label>
-                <select required value={formData.gender || 'No especificado'} onChange={(e) => setFormData({ ...formData, gender: e.target.value })} className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]">
-                  <option value="Femenino">Femenino</option><option value="Masculino">Masculino</option><option value="No binario">No binario</option><option value="Prefiero no decir">Prefiero no decir</option>
+                <select required value={formData.gender || ''} onChange={(e) => setFormData({ ...formData, gender: e.target.value })} className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]">
+                  <option value="" disabled>Selecciona…</option><option value="Femenino">Femenino</option><option value="Masculino">Masculino</option><option value="No binario">No binario</option><option value="Prefiero no decir">Prefiero no decir</option>
                 </select>
               </div>
               <div>
@@ -377,8 +409,11 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             <div className="text-xs text-[#4A6B53] font-bold">
               {baiAnsweredCount === 21 ? '✅ Todo listo para enviar.' : `Faltan ${21 - baiAnsweredCount} preguntas.`}
             </div>
-            <button type="button" disabled={baiAnsweredCount < 21} onClick={() => handleSendAssessment(InstrumentCode.BAI)} className="w-full sm:w-auto px-6 py-3.5 text-sm font-bold text-white bg-[#4A6B53] hover:bg-[#3B5743] disabled:opacity-50 disabled:cursor-not-allowed rounded-xl shadow-md cursor-pointer inline-flex items-center justify-center gap-2 transition-all">
-              <Send className="w-4 h-4" /> {lastBai ? 'Actualizar Evaluación' : 'Enviar Cuestionario 1'}
+            {submitError && (
+              <div className="text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-lg p-2 w-full sm:flex-1">{submitError}</div>
+            )}
+            <button type="button" disabled={baiAnsweredCount < 21 || isSubmitting} onClick={() => handleSendAssessment(InstrumentCode.BAI)} className="w-full sm:w-auto px-6 py-3.5 text-sm font-bold text-white bg-[#4A6B53] hover:bg-[#3B5743] disabled:opacity-50 disabled:cursor-not-allowed rounded-xl shadow-md cursor-pointer inline-flex items-center justify-center gap-2 transition-all">
+              <Send className="w-4 h-4" /> {isSubmitting ? 'Enviando…' : lastBai ? 'Actualizar Evaluación' : 'Enviar Cuestionario 1'}
             </button>
           </div>
         </div>
@@ -448,8 +483,11 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             <div className="text-xs text-[#4A6B53] font-bold">
               {bdiAnsweredCount === 21 ? '✅ Todo listo para enviar.' : `Faltan ${21 - bdiAnsweredCount} preguntas.`}
             </div>
-            <button type="button" disabled={bdiAnsweredCount < 21} onClick={() => handleSendAssessment(InstrumentCode.BDI)} className="w-full sm:w-auto px-6 py-3.5 text-sm font-bold text-white bg-[#4A6B53] hover:bg-[#3B5743] disabled:opacity-50 disabled:cursor-not-allowed rounded-xl shadow-md cursor-pointer inline-flex items-center justify-center gap-2 transition-all">
-              <Send className="w-4 h-4" /> {lastBdi ? 'Actualizar Evaluación' : 'Enviar Cuestionario 2'}
+            {submitError && (
+              <div className="text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-lg p-2 w-full sm:flex-1">{submitError}</div>
+            )}
+            <button type="button" disabled={bdiAnsweredCount < 21 || isSubmitting} onClick={() => handleSendAssessment(InstrumentCode.BDI)} className="w-full sm:w-auto px-6 py-3.5 text-sm font-bold text-white bg-[#4A6B53] hover:bg-[#3B5743] disabled:opacity-50 disabled:cursor-not-allowed rounded-xl shadow-md cursor-pointer inline-flex items-center justify-center gap-2 transition-all">
+              <Send className="w-4 h-4" /> {isSubmitting ? 'Enviando…' : lastBdi ? 'Actualizar Evaluación' : 'Enviar Cuestionario 2'}
             </button>
           </div>
         </div>

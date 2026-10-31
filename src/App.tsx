@@ -119,54 +119,58 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     return () => { active = false; };
   }, [loadDirectory]);
 
-          const persistStudentRecord = async (s: StudentRecord): Promise<boolean> => {
-    if (!supabase) return false;
-    
-    // Formatear la fecha
-    let formattedBirthDate = null;
+  // Carga el estado de los cuestionarios del propio alumno (solo instrumento y fecha, sin puntajes)
+  const loadMyAssessments = React.useCallback(async () => {
+    if (!supabase || authUser.role !== RoleCode.ESTUDIANTE) return;
+    const { data, error } = await supabase.rpc('my_assessment_status');
+    if (error) { console.error('No se pudo cargar el estado de los cuestionarios', error); return; }
+    setAssessments((data ?? []).map((r: any) => ({
+      id: r.id, studentId: r.student_id, instrumentCode: r.instrument_code, appliedAt: r.submitted_at,
+    })) as any);
+  }, [authUser]);
+
+  useEffect(() => { loadMyAssessments(); }, [loadMyAssessments]);
+
+  // Guarda la ficha del alumno. Lanza un error si algo falla, para que el portal lo muestre.
+  const persistStudentRecord = async (s: StudentRecord): Promise<void> => {
+    if (!supabase) throw new Error('Supabase no está configurado.');
+
+    // Convertir fecha DD/MM/AAAA a AAAA-MM-DD (el selector de fecha ya entrega AAAA-MM-DD)
+    let birthDate: string | null = null;
     if (s.birthDate) {
       if (/^\d{2}\/\d{2}\/\d{4}$/.test(s.birthDate)) {
         const [day, month, year] = s.birthDate.split('/');
-        formattedBirthDate = `${year}-${month}-${day}`;
+        birthDate = `${year}-${month}-${day}`;
       } else if (/^\d{4}-\d{2}-\d{2}$/.test(s.birthDate)) {
-        formattedBirthDate = s.birthDate;
+        birthDate = s.birthDate;
       }
     }
 
-    // Preparar los datos
     const patch: Record<string, unknown> = {
       full_name: s.fullName,
       matricula: s.matricula,
       program_name: s.programName || 'Sin asignar',
       semester: s.semester > 0 ? s.semester : null,
-      group_code: s.group || null,
-      gender: s.gender ?? null, 
-      age: s.age ?? null, 
+      gender: s.gender ?? null,
+      age: s.age ?? null,
       phone: s.phone ?? null,
-      current_address: s.currentAddress ?? null, 
       origin_city: s.originCity ?? null,
+      current_address: s.currentAddress ?? null,
       emergency_contact: s.emergencyContact ?? null,
     };
-    if (formattedBirthDate) patch.birth_date = formattedBirthDate;
+    if (birthDate) patch.birth_date = birthDate;
 
-    // ACTUALIZACIÓN DIRECTA POR CORREO ELECTRÓNICO
-    // (Esto evita el problema del ID temporal)
-    const { data, error } = await supabase
-      .from('students')
-      .update(patch)
-      .eq('institutional_email', s.institutionalEmail.toLowerCase())
-      .select('id');
-    
+    const { data, error } = await supabase.from('students').update(patch).eq('id', s.id).select('id');
     if (error) {
-      console.error("Error al guardar ficha:", error);
-      throw new Error(error.message || 'No se pudo guardar en la base de datos');
+      console.error('Error al guardar ficha:', error);
+      if (error.code === '23505') {
+        throw new Error('Esa matrícula ya está registrada con otra cuenta. Avisa a Psicología.');
+      }
+      throw new Error(error.message || 'No se pudo guardar en la base de datos.');
     }
-
     if (!data || data.length === 0) {
-      throw new Error("No se encontró el registro del alumno para actualizar.");
+      throw new Error('No se encontró tu registro de alumno. Cierra sesión y vuelve a entrar.');
     }
-
-    return true;
   };
 
   const appendAuditLog = (actionType: AuditLogEntry['actionType'], targetResource: string, targetId: string, details: string) => {
@@ -208,42 +212,37 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     handleAssignCaseResponsible(caseId, psychologistId, undefined);
   };
 
-   const handleCreateConsultationAssessment = async (payload: any) => {
+  const handleCreateConsultationAssessment = (payload: any) => {
     const config = INITIAL_INSTRUMENT_CONFIGS[payload.instrumentCode];
     const detResult = evaluateInstrumentDeterministically(payload.instrumentCode, config, payload.responses);
-    const newAssessmentId = crypto.randomUUID(); // Genera un ID válido
+    const newAssessmentId = `ass-${Date.now()}`;
     const nowIso = new Date().toISOString();
 
-    // 1. GUARDAR EN SUPABASE
-    const { error } = await supabase.from('assessments').insert({
-      id: newAssessmentId,
-      clinical_case_id: payload.clinicalCaseId,
-      student_id: payload.studentId,
-      instrument_code: payload.instrumentCode,
-      applied_at: nowIso,
-      status: detResult.isComplete ? 'CALIFICADO' : 'INCOMPLETO',
-      responses: payload.responses,
-      total_score: detResult.totalScore,
-      psychometric_category: detResult.psychometricCategory,
-      // ... otros campos requeridos por tu tabla
-    });
-
-    if (error) {
-      console.error("Error guardando evaluación:", error);
-      alert("No se pudo guardar la evaluación. Revisa tu conexión.");
-      return;
-    }
-
-    // 2. ACTUALIZAR EL ESTADO LOCAL (para que se vea reflejado)
     setAssessments((prev) => [{
-      id: newAssessmentId, clinicalCaseId: payload.clinicalCaseId, studentId: payload.studentId, 
-      instrumentCode: payload.instrumentCode, appliedAt: nowIso,
-      status: detResult.isComplete ? AssessmentStatus.CALIFICADO : AssessmentStatus.INCOMPLETO,
-      responses: payload.responses, totalScore: detResult.totalScore, 
-      psychometricCategory: detResult.psychometricCategory,
-    } as any, ...prev]);
+      id: newAssessmentId, clinicalCaseId: payload.clinicalCaseId, studentId: payload.studentId, periodId: null as any,
+      modality: AttentionModality.ATENCION_INDIVIDUAL, instrumentCode: payload.instrumentCode, instrumentVersionId: config.id,
+      versionTag: config.versionTag, scoringRuleVersion: config.scoringRuleVersion, appliedAt: nowIso,
+      status: detResult.isComplete ? (payload.professionalInterpretation.trim() ? AssessmentStatus.REVISADO_PROFESIONAL : AssessmentStatus.CALIFICADO) : detResult.status,
+      completionPercentage: Math.round((detResult.answeredCount / detResult.expectedCount) * 100), responses: payload.responses,
+      totalScore: detResult.totalScore, psychometricCategory: detResult.psychometricCategory, suggestedPriority: detResult.suggestedPriority,
+      calculatedByProcess: detResult.calculatedByProcess, applicationContextNote: payload.applicationContextNote,
+      professionalInterpretation: payload.professionalInterpretation || null, reviewedByPsychologistId: detResult.isComplete ? currentUser.id : null,
+      reviewedByPsychologistName: detResult.isComplete ? currentUser.fullName : null, reviewedAt: detResult.isComplete ? nowIso : null,
+    }, ...prev]);
 
-    // (El resto de tu lógica para actualizar los casos clínicos se mantiene igual)
+    setCases((prev) => prev.map((c) => {
+        if (c.id !== payload.clinicalCaseId) return c;
+        const updatedCase = { ...c, updatedAt: nowIso };
+        if (detResult.isComplete && detResult.totalScore !== null) {
+          if (payload.instrumentCode === InstrumentCode.BAI) updatedCase.anxietyIndicator = { lastAssessmentId: newAssessmentId, instrumentVersion: config.versionTag, score: detResult.totalScore, category: detResult.psychometricCategory, evaluatedAt: nowIso.slice(0, 10) };
+          else updatedCase.depressionIndicator = { lastAssessmentId: newAssessmentId, instrumentVersion: config.versionTag, score: detResult.totalScore, category: detResult.psychometricCategory, evaluatedAt: nowIso.slice(0, 10) };
+          if (detResult.suggestedPriority) { updatedCase.psychometricSuggestedPriority = detResult.suggestedPriority; if (detResult.suggestedPriority === PriorityLevel.ROJO) updatedCase.operationalPriority = PriorityLevel.ROJO; }
+          updatedCase.lastEvaluationDate = nowIso.slice(0, 10);
+        }
+        updatedCase.nextFollowUpAction = payload.nextFollowUpAction; updatedCase.nextFollowUpDate = payload.nextFollowUpDate;
+        return updatedCase;
+    }));
+    appendAuditLog('CALIFICACION_DETERMINISTA', 'assessments', newAssessmentId, `Aplicación de ${payload.instrumentCode} en ${payload.clinicalCaseId}`);
   };
 
   const handleRegisterSession = (payload: any) => {
@@ -332,41 +331,14 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
   const selectedClinicalCase = authorizedCases.find((c) => c.id === selectedCaseId) || authorizedCases[0];
   const selectedStudent = students.find((s) => s.id === selectedClinicalCase?.studentId);
 
-    const currentStudent = React.useMemo(() => {
-     // 1. Intentar por ID vinculado (si el contexto ya lo cargó)
-       if (currentUser.linkedStudentId) {
-         const found = students.find((s) => s.id === currentUser.linkedStudentId);
-         if (found) return found;
-       }
-
-    // 2. Intentar por correo electrónico (la forma más segura para alumnos nuevos)
-    const email = currentUser.email.toLowerCase().trim();
-    const foundByEmail = students.find(
-      (s) => s.institutionalEmail.toLowerCase().trim() === email
-    );
-    if (foundByEmail) return foundByEmail;
-
-    // 3. Si es un alumno recién creado y aún no se ha recargado la lista de students,
-    // creamos un registro temporal en memoria para que la vista no se quede en blanco.
-    if (currentUser.role === RoleCode.ESTUDIANTE) {
-      return {
-        id: 'temp-student-id',
-        matricula: 'PENDIENTE',
-        fullName: currentUser.fullName,
-        institutionalEmail: currentUser.email,
-        programName: 'Sin asignar',
-        semester: 0,
-        group: '',
-        entryGeneration: '',
-        registrationStatus: 'ACTIVO',
-        incorporatedAt: new Date().toISOString(),
-        entryModality: AttentionModality.NUEVO_INGRESO,
-        academicDepartment: '',
-        programId: '',
-      } as StudentRecord;
+  // El registro del alumno lo crea el servidor al iniciar sesión (sync_my_authorization).
+  const currentStudent = React.useMemo(() => {
+    if (currentUser.linkedStudentId) {
+      const found = students.find((s) => s.id === currentUser.linkedStudentId);
+      if (found) return found;
     }
-
-    return undefined;
+    const email = currentUser.email.toLowerCase().trim();
+    return students.find((s) => s.institutionalEmail.toLowerCase().trim() === email);
   }, [currentUser, students]);
 
   const currentStudentCase = React.useMemo(() => cases.find((c) => c.studentId === currentStudent?.id), [cases, currentStudent]);
@@ -395,15 +367,30 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
   if (isStudentView) {
     const targetStudent = currentUser.role === RoleCode.ESTUDIANTE ? currentStudent : simulationStudent;
     const targetCase = currentUser.role === RoleCode.ESTUDIANTE ? currentStudentCase : simulationStudentCase;
-        if (!targetStudent) {
+    if (dataLoading || !targetStudent) {
       return (
         <div className="p-10 text-center flex flex-col items-center justify-center min-h-[50vh]">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4A6B53] mb-4"></div>
-          <p className="text-[#4A6B53] font-bold">Sincronizando tus datos...</p>
-          <p className="text-xs text-gray-500 mt-2">Si este mensaje no desaparece en 10 segundos, cierra sesión y vuelve a entrar.</p>
-          <button onClick={onSignOut} className="mt-4 px-4 py-2 bg-white border border-[#E8E2D5] rounded-lg text-sm text-[#4A6B53] font-bold hover:bg-gray-50">
-            Cerrar Sesión
-          </button>
+          {dataLoading && <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4A6B53] mb-4"></div>}
+          <p className="text-[#4A6B53] font-bold">
+            {dataLoading
+              ? 'Sincronizando tus datos...'
+              : viewAsStudentMode
+                ? 'No hay un alumno de ejemplo disponible para la vista previa.'
+                : 'No encontramos tu registro de alumno.'}
+          </p>
+          {dataError && <p className="text-xs text-rose-700 mt-2 max-w-md">{dataError}</p>}
+          {!dataLoading && !viewAsStudentMode && (
+            <p className="text-xs text-gray-500 mt-2">Cierra sesión y vuelve a entrar. Si el problema continúa, avisa al administrador.</p>
+          )}
+          {viewAsStudentMode ? (
+            <button onClick={() => setViewAsStudentMode(false)} className="mt-4 px-4 py-2 bg-white border border-[#E8E2D5] rounded-lg text-sm text-[#4A6B53] font-bold hover:bg-gray-50">
+              Volver al Panel de Administrador
+            </button>
+          ) : (
+            <button onClick={onSignOut} className="mt-4 px-4 py-2 bg-white border border-[#E8E2D5] rounded-lg text-sm text-[#4A6B53] font-bold hover:bg-gray-50">
+              Cerrar Sesión
+            </button>
+          )}
         </div>
       );
     }
@@ -411,34 +398,29 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
       <div className="min-h-screen bg-[#FDFBF7]">
         {viewAsStudentMode && (
           <div className="bg-amber-100 p-3 text-center text-amber-900 text-xs font-bold border-b border-amber-300">
-            Estás viendo la pantalla como Alumno. <button onClick={() => setViewAsStudentMode(false)} className="ml-2 underline hover:text-amber-950">Volver al Panel de Administrador</button>
+            Estás viendo la pantalla como Alumno (vista previa: no se guarda nada). <button onClick={() => setViewAsStudentMode(false)} className="ml-2 underline hover:text-amber-950">Volver al Panel de Administrador</button>
           </div>
         )}
         <main className="p-2 sm:p-6 max-w-[1440px] mx-auto">
           <StudentPortalView
+            key={targetStudent.id}
             currentUser={currentUser} student={targetStudent} clinicalCase={targetCase}
             assessments={assessments.filter((a) => a.studentId === targetStudent.id)}
             onUpdateStudentRecord={async (updated) => {
-              if (!(await persistStudentRecord(updated))) return;
+              if (viewAsStudentMode) throw new Error('Vista previa: no se guardan cambios.');
+              await persistStudentRecord(updated);
               setStudents((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
             }}
-            onSubmitAssessment={(instrumentCode, responses) => {
-  // Si no hay expediente, creamos un ID temporal para no romper el flujo
-  const caseId = targetCase ? targetCase.id : `temp-case-${targetStudent.id}`;
-  
-  handleCreateConsultationAssessment({
-    clinicalCaseId: caseId,
-    studentId: targetStudent.id,
-    instrumentCode,
-    applicationContextNote: `Cuestionario autoadministrado`,
-    responses,
-    professionalInterpretation: '',
-    overridePriority: null,
-    overrideReason: '',
-    nextFollowUpAction: 'Revisión inicial',
-    nextFollowUpDate: new Date().toISOString().slice(0, 10),
-  });
-}}
+            onSubmitAssessment={async (instrumentCode, responses) => {
+              if (!supabase) throw new Error('Supabase no está configurado.');
+              if (viewAsStudentMode) throw new Error('Vista previa: no se guardan cuestionarios.');
+              const { error } = await supabase.rpc('submit_my_assessment', {
+                p_instrument: instrumentCode,
+                p_responses: responses,
+              });
+              if (error) throw new Error(error.message || 'No se pudo guardar el cuestionario.');
+              await loadMyAssessments();
+            }}
             onLogoutOrSwitchRole={onSignOut}
           />
         </main>
