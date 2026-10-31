@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { AccountStatus, RoleCode, UserProfile } from '../types/siape';
 import { isSupabaseConfigured, signInWithSupabaseGoogle, supabase } from '../lib/supabase';
@@ -57,7 +57,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [blockedReason, setBlockedReason] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const resolveSession = useCallback(async (session: Session | null) => {
+  // Evita resolver la misma sesión dos veces a la vez (getSession y onAuthStateChange disparan casi juntos)
+  const inFlightRef = useRef<{ key: string; promise: Promise<void> } | null>(null);
+
+  const doResolveSession = useCallback(async (session: Session | null) => {
     if (!supabase) {
       setStatus('ERROR');
       setErrorMessage('Faltan VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en el entorno.');
@@ -73,8 +76,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       // Enlaza la cuenta de Google con su perfil. Para alumnos nuevos (Gmail o institucional)
       // el servidor crea perfil, registro de alumno y expediente en esta misma llamada.
-      const { data: syncResult, error: syncError } = await supabase.rpc('sync_my_authorization');
-      if (syncError) throw syncError;
+      const callSync = () => supabase!.rpc('sync_my_authorization');
+      let sync = await callSync();
+      if (sync.error && sync.error.code === '23505') {
+        // choque de claves únicas por una llamada simultánea: reintenta una vez
+        await new Promise((r) => setTimeout(r, 600));
+        sync = await callSync();
+      }
+      if (sync.error) throw sync.error;
+      const syncResult = sync.data;
 
       const { data: currentProfile, error: profileError } = await supabase
         .from('profiles')
@@ -126,6 +136,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setStatus('ERROR');
     }
   }, []);
+
+  const resolveSession = useCallback((session: Session | null): Promise<void> => {
+    const key = session?.user?.id ?? 'SIGNED_OUT';
+    if (inFlightRef.current && inFlightRef.current.key === key) return inFlightRef.current.promise;
+    const promise = doResolveSession(session).finally(() => {
+      if (inFlightRef.current?.key === key) inFlightRef.current = null;
+    });
+    inFlightRef.current = { key, promise };
+    return promise;
+  }, [doResolveSession]);
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
