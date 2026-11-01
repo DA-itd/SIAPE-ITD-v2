@@ -59,6 +59,53 @@ const calcAge = (iso: string): number => {
   return age > 0 ? age : 0;
 };
 
+// Fecha de hoy en hora local (AAAA-MM-DD)
+const todayIso = (): string => {
+  const t = new Date();
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+};
+
+// Fecha real (no acepta 31/02, letras ni años absurdos) y edad razonable
+const isValidBirthDate = (iso: string): boolean => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || '')) return false;
+  const [y, m, d] = iso.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return false;
+  const age = calcAge(iso);
+  return age >= 14 && age <= 90;
+};
+
+// Teléfono: solo dígitos, máximo 10, con formato 618-123-4567
+const formatPhone = (raw: string): string => {
+  const digits = (raw || '').replace(/\D/g, '').slice(0, 10);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+};
+const PHONE_REGEX = /^\d{3}-\d{3}-\d{4}$/;
+
+// Contacto de emergencia: se guarda como "Nombre / 618-123-4567"
+const composeEmergencyContact = (name: string, phone: string): string => {
+  const n = name.trim();
+  const p = phone.trim();
+  return !n && !p ? '' : `${n} / ${p}`;
+};
+const parseEmergencyContact = (raw?: string | null): { name: string; phone: string } => {
+  const text = (raw || '').trim();
+  if (!text) return { name: '', phone: '' };
+  const sep = text.lastIndexOf(' / ');
+  if (sep >= 0) return { name: text.slice(0, sep).trim(), phone: formatPhone(text.slice(sep + 3)) };
+  // Texto libre anterior: si termina en un número de 10 dígitos, se separa
+  const m = text.match(/(\d[\d\s\-().]{8,}\d)\s*$/);
+  if (m && m.index !== undefined) {
+    const digits = m[1].replace(/\D/g, '');
+    if (digits.length >= 10) {
+      return { name: text.slice(0, m.index).replace(/[\s/\-:,]+$/, '').trim(), phone: formatPhone(digits.slice(-10)) };
+    }
+  }
+  return { name: text, phone: '' };
+};
+
 interface StudentPortalViewProps {
   currentUser: UserProfile;
   student: StudentRecord;
@@ -109,7 +156,11 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     ...student,
     matricula: student.matricula?.startsWith('G-') ? '' : student.matricula,
     gender: student.gender ?? '',
+    phone: formatPhone(student.phone ?? ''),
   });
+  const initialEmergency = parseEmergencyContact(student.emergencyContact);
+  const [emergencyName, setEmergencyName] = useState<string>(initialEmergency.name);
+  const [emergencyPhone, setEmergencyPhone] = useState<string>(initialEmergency.phone);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedPersonalDataBanner, setSavedPersonalDataBanner] = useState<boolean>(false);
@@ -140,7 +191,27 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     if (isDataLocked) return;
     try {
       setFormError(null);
-      await onUpdateStudentRecord(formData);
+      if (!isValidBirthDate(formData.birthDate || '')) {
+        setFormError('Revisa tu fecha de nacimiento: debe ser una fecha válida (día, mes y año).');
+        return;
+      }
+      if (!PHONE_REGEX.test(formData.phone || '')) {
+        setFormError('El teléfono móvil debe tener el formato 618-123-4567.');
+        return;
+      }
+      if (!emergencyName.trim()) {
+        setFormError('Escribe el nombre de tu contacto de emergencia.');
+        return;
+      }
+      if (!PHONE_REGEX.test(emergencyPhone)) {
+        setFormError('El teléfono del contacto de emergencia debe tener el formato 618-123-4567.');
+        return;
+      }
+      await onUpdateStudentRecord({
+        ...formData,
+        age: calcAge(formData.birthDate as string),
+        emergencyContact: composeEmergencyContact(emergencyName, emergencyPhone),
+      });
       setSavedPersonalDataBanner(true);
       setTimeout(() => setSavedPersonalDataBanner(false), 5000);
     } catch (err: any) {
@@ -302,12 +373,11 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             <h3 className="text-xs font-bold uppercase tracking-wider text-[#4A6B53] font-mono">B. Datos Sociodemográficos y Contacto</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div>
-                <label className="block font-semibold text-[#3B4A3F] mb-1">Edad *</label>
-                <input type="number" required value={formData.age || ''} onChange={(e) => setFormData({ ...formData, age: Number(e.target.value) })} className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]" />
-              </div>
-              <div>
                 <label className="block font-semibold text-[#3B4A3F] mb-1">Fecha de Nacimiento *</label>
-                <input type="date" required value={formData.birthDate || ''} max={new Date().toISOString().split('T')[0]} onChange={(e) => setFormData({ ...formData, birthDate: e.target.value, age: calcAge(e.target.value) })} className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]" />
+                <input type="date" required value={formData.birthDate || ''} min="1930-01-01" max={todayIso()} onChange={(e) => setFormData({ ...formData, birthDate: e.target.value, age: calcAge(e.target.value) })} className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]" />
+                {isValidBirthDate(formData.birthDate || '') && (
+                  <p className="mt-1 text-[11px] text-[#4A6B53]">Edad calculada: <span className="font-mono font-bold">{calcAge(formData.birthDate as string)}</span> años</p>
+                )}
               </div>
               <div>
                 <label className="block font-semibold text-[#3B4A3F] mb-1">Género *</label>
@@ -317,7 +387,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               </div>
               <div>
                 <label className="block font-semibold text-[#3B4A3F] mb-1">Teléfono Móvil *</label>
-                <input type="text" required value={formData.phone || ''} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="Ej. 618 123 4567" className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]" />
+                <input type="tel" inputMode="numeric" autoComplete="tel-national" required maxLength={12} pattern="\d{3}-\d{3}-\d{4}" title="Formato: 618-123-4567" value={formData.phone || ''} onChange={(e) => setFormData({ ...formData, phone: formatPhone(e.target.value) })} placeholder="618-123-4567" className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]" />
               </div>
             </div>
             <div className="grid grid-cols-1 gap-4 text-xs">
@@ -326,12 +396,18 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                 <input type="text" required value={formData.originCity || ''} onChange={(e) => setFormData({ ...formData, originCity: e.target.value })} placeholder="Ej. Durango, Dgo." className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]" />
               </div>
               <div>
-                <label className="block font-semibold text-[#3B4A3F] mb-1">Domicilio Actual en Durango *</label>
-                <input type="text" required value={formData.currentAddress || ''} onChange={(e) => setFormData({ ...formData, currentAddress: e.target.value })} placeholder="Calle, número, colonia" className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]" />
+                <label className="block font-semibold text-[#3B4A3F] mb-1">Domicilio Actual *</label>
+                <input type="text" required value={formData.currentAddress || ''} onChange={(e) => setFormData({ ...formData, currentAddress: e.target.value })} placeholder="C. Hidalgo 123, Col. Centro" className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]" />
               </div>
-              <div>
-                <label className="block font-semibold text-[#3B4A3F] mb-1">Contacto de Emergencia (Nombre y Teléfono) *</label>
-                <input type="text" required value={formData.emergencyContact || ''} onChange={(e) => setFormData({ ...formData, emergencyContact: e.target.value })} placeholder="Ej. María Soto (Mamá) / 618..." className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-[#3B4A3F] mb-1">Contacto de Emergencia (Nombre y parentesco) *</label>
+                  <input type="text" required value={emergencyName} onChange={(e) => setEmergencyName(e.target.value)} placeholder="Ej. María Soto (Mamá)" className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]" />
+                </div>
+                <div>
+                  <label className="block font-semibold text-[#3B4A3F] mb-1">Teléfono del Contacto de Emergencia *</label>
+                  <input type="tel" inputMode="numeric" required maxLength={12} pattern="\d{3}-\d{3}-\d{4}" title="Formato: 618-123-4567" value={emergencyPhone} onChange={(e) => setEmergencyPhone(formatPhone(e.target.value))} placeholder="618-123-4567" className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] font-mono focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]" />
+                </div>
               </div>
             </div>
           </fieldset>
