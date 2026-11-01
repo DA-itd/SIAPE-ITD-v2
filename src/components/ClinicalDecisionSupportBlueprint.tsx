@@ -35,7 +35,6 @@ import {
   checkRlsAccessPermission,
   evaluateInstrumentDeterministically,
 } from '../lib/scoringEngine';
-import ClinicalDecisionSupportBlueprint from './ClinicalDecisionSupportBlueprint';
 
 interface ClinicalDecisionSupportBlueprintProps {
   currentUser: UserProfile;
