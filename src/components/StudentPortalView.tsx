@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   FileText,
   HeartHandshake,
+  LifeBuoy,
   Lock,
   LogOut,
   Save,
@@ -106,6 +107,16 @@ const parseEmergencyContact = (raw?: string | null): { name: string; phone: stri
   return { name: text, phone: '' };
 };
 
+// Tamizaje Columbia (C-SSRS): texto de las 6 preguntas, tal como se aplicaba en el formulario institucional
+const COLUMBIA_ITEMS: { itemNumber: number; text: string }[] = [
+  { itemNumber: 1, text: 'En el pasado mes, ¿ha deseado estar muerto(a) o poder dormirse y no despertar?' },
+  { itemNumber: 2, text: 'En el pasado mes, ¿ha tenido realmente la idea de suicidarse?' },
+  { itemNumber: 3, text: 'En el pasado mes, ¿ha pensado en cómo llevaría esto a cabo?' },
+  { itemNumber: 4, text: 'En el pasado mes, ¿ha tenido estas ideas y en cierto grado la intención de llevarlas a cabo?' },
+  { itemNumber: 5, text: 'En el pasado mes, ¿ha comenzado a elaborar o ha elaborado los detalles sobre cómo suicidarse? ¿Tiene intenciones de llevar a cabo este plan?' },
+  { itemNumber: 6, text: 'En los pasados 3 meses, ¿ha hecho algo, comenzado a hacer algo o se ha preparado para hacer algo para terminar su vida?' },
+];
+
 interface StudentPortalViewProps {
   currentUser: UserProfile;
   student: StudentRecord;
@@ -113,6 +124,7 @@ interface StudentPortalViewProps {
   clinicalCase?: ClinicalCaseRecord;
   onUpdateStudentRecord: (updated: StudentRecord) => Promise<void>;
   onSubmitAssessment: (instrumentCode: InstrumentCode, responses: Record<number, number>) => Promise<void>;
+  onSubmitColumbia: (responses: Record<number, number>) => Promise<void>;
   onLogoutOrSwitchRole?: () => void;
 }
 
@@ -123,6 +135,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   clinicalCase,
   onUpdateStudentRecord,
   onSubmitAssessment,
+  onSubmitColumbia,
   onLogoutOrSwitchRole,
 }) => {
   const isDataLocked = useMemo(() => {
@@ -141,7 +154,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     );
   }, [student]);
 
-  const [activeTab, setActiveTab] = useState<'FICHA_DATOS' | 'BAI' | 'BDI' | 'ESTADO'>(
+  const [activeTab, setActiveTab] = useState<'FICHA_DATOS' | 'BAI' | 'BDI' | 'COLUMBIA' | 'ESTADO'>(
     isDataLocked ? 'BAI' : 'FICHA_DATOS'
   );
 
@@ -169,6 +182,11 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   // Estados para los cuestionarios (inician vacíos para permitir nuevas aplicaciones)
   const [baiResponses, setBaiResponses] = useState<Record<number, number>>({});
   const [bdiResponses, setBdiResponses] = useState<Record<number, number>>({});
+  const [columbiaResponses, setColumbiaResponses] = useState<Record<number, number>>({});
+  const [columbiaSubmitted, setColumbiaSubmitted] = useState<boolean>(false);
+
+  // El aviso de error de un cuestionario no debe seguir visible al cambiar de pestaña
+  useEffect(() => { setSubmitError(null); }, [activeTab]);
   const [submittedInstrument, setSubmittedInstrument] = useState<InstrumentCode | null>(null);
 
   const baiConfig = INITIAL_INSTRUMENT_CONFIGS[InstrumentCode.BAI];
@@ -183,8 +201,14 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     .filter((a) => a.instrumentCode === InstrumentCode.BDI)
     .sort((a, b) => b.appliedAt.localeCompare(a.appliedAt))[0];
 
+  const lastColumbia = assessments
+    .filter((a) => (a.instrumentCode as unknown as string) === 'CSSRS')
+    .sort((a, b) => b.appliedAt.localeCompare(a.appliedAt))[0];
+
   const baiAnsweredCount = Object.keys(baiResponses).length;
   const bdiAnsweredCount = Object.keys(bdiResponses).length;
+  const columbiaAnsweredCount = Object.keys(columbiaResponses).length;
+  const columbiaHasYes = Object.values(columbiaResponses).some((v) => v === 1);
 
   const handleSavePersonalData = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -241,6 +265,25 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     }
   };
 
+  const handleSendColumbia = async () => {
+    if (Object.keys(columbiaResponses).length < 6) {
+      setSubmitError('Responde las 6 preguntas antes de enviar.');
+      return;
+    }
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      await onSubmitColumbia(columbiaResponses);
+      setColumbiaSubmitted(true);
+    } catch (err: any) {
+      console.error('Error al enviar el cuestionario 3', err);
+      setSubmitError(`No pudimos guardar tus respuestas: ${err?.message ?? 'revisa tu conexión'}. Siguen en pantalla; inténtalo de nuevo.`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const resetColumbia = () => { setColumbiaResponses({}); setColumbiaSubmitted(false); };
   const resetBai = () => setBaiResponses({});
   const resetBdi = () => setBdiResponses({});
 
@@ -311,6 +354,12 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             <FileText className="w-4 h-4" /> {isDataLocked ? '2.' : '3.'} Cuestionario 2
             <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${lastBdi ? 'bg-[#A3C9A8] text-[#2F3E32]' : 'bg-amber-100 text-amber-900'}`}>
               {lastBdi ? 'Evaluado' : `${bdiAnsweredCount}/21`}
+            </span>
+          </button>
+          <button onClick={() => setActiveTab('COLUMBIA')} className={`px-4 py-2.5 rounded-xl font-bold cursor-pointer transition-colors inline-flex items-center gap-2 whitespace-nowrap ${activeTab === 'COLUMBIA' ? 'bg-[#4A6B53] text-white shadow-sm' : 'text-[#4A6B53] hover:bg-[#E8E2D5]'}`}>
+            <LifeBuoy className="w-4 h-4" /> {isDataLocked ? '3.' : '4.'} Cuestionario 3
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${lastColumbia ? 'bg-[#A3C9A8] text-[#2F3E32]' : 'bg-amber-100 text-amber-900'}`}>
+              {lastColumbia ? 'Evaluado' : `${columbiaAnsweredCount}/6`}
             </span>
           </button>
         </div>
@@ -426,7 +475,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <span className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-[#A3C9A8] text-[#2F3E32]">
-                  Cuestionario 1 de 2
+                  Cuestionario 1 de 3
                 </span>
                 <h2 className="text-xl font-bold text-[#2F3E32] mt-2">Sensaciones Físicas y Nerviosismo</h2>
               </div>
@@ -501,7 +550,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
           <div className="border-b border-[#E8E2D5] pb-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <span className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-[#A3C9A8] text-[#2F3E32]">Cuestionario 2 de 2</span>
+                <span className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-[#A3C9A8] text-[#2F3E32]">Cuestionario 2 de 3</span>
                 <h2 className="text-xl font-bold text-[#2F3E32] mt-2">Estado de Ánimo y Pensamientos</h2>
               </div>
               <div className="text-left sm:text-right">
@@ -527,9 +576,9 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             <div className="p-6 bg-emerald-50 border-2 border-emerald-400 rounded-2xl flex flex-col items-center justify-center gap-3 text-center">
               <CheckCircle2 className="w-10 h-10 text-emerald-600" />
               <h3 className="text-lg font-bold text-emerald-900">¡Muchas gracias por tus respuestas!</h3>
-              <p className="text-sm text-emerald-800">Has completado todo el proceso. La Oficina de Psicología revisará tu información. Te esperamos en un mes para ver tu avance.</p>
-              <button onClick={() => setActiveTab('ESTADO')} className="mt-2 px-6 py-2.5 font-bold text-white bg-[#4A6B53] rounded-xl cursor-pointer">
-                Ver mi Estado Final ➔
+              <p className="text-sm text-emerald-800">Gracias. Solo falta un último cuestionario breve (6 preguntas): el Cuestionario 3.</p>
+              <button onClick={() => setActiveTab('COLUMBIA')} className="mt-2 px-6 py-2.5 font-bold text-white bg-[#4A6B53] rounded-xl cursor-pointer">
+                Continuar al Cuestionario 3 ➔
               </button>
             </div>
           )}
@@ -569,6 +618,101 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
         </div>
       )}
 
+      {/* PESTAÑA: CUESTIONARIO 3 (TAMIZAJE COLUMBIA) */}
+      {activeTab === 'COLUMBIA' && (
+        <div className="bg-white border border-[#E8E2D5] rounded-2xl p-4 sm:p-8 space-y-6">
+          <div className="border-b border-[#E8E2D5] pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <span className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-[#A3C9A8] text-[#2F3E32]">Cuestionario 3 de 3</span>
+                <h2 className="text-xl font-bold text-[#2F3E32] mt-2">Tu Bienestar y Seguridad</h2>
+              </div>
+              <div className="text-left sm:text-right">
+                <div className="text-xs font-mono font-bold text-[#4A6B53]">{columbiaAnsweredCount} de 6 respondidos</div>
+                <div className="w-full sm:w-32 h-2 bg-[#E8E2D5] rounded-full mt-1 overflow-hidden">
+                  <div className="h-full bg-[#4A6B53] transition-all" style={{ width: `${(columbiaAnsweredCount / 6) * 100}%` }} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 bg-[#F4F0E6] border border-[#E8E2D5] rounded-xl text-xs text-[#3B4A3F] space-y-2">
+            <p className="leading-relaxed">Estas seis preguntas son parte del cuidado de tu bienestar. Responde con sinceridad: tus respuestas son confidenciales y solo las revisa la Oficina de Psicología.</p>
+            <p className="leading-relaxed flex items-start gap-2">
+              <LifeBuoy className="w-4 h-4 mt-0.5 shrink-0 text-[#4A6B53]" />
+              <span>
+                <strong>Si en este momento sientes que puedes hacerte daño, no esperes:</strong> llama al{' '}
+                <a href="tel:911" className="font-bold underline">911</a> o a la{' '}
+                <a href="tel:8009112000" className="font-bold underline">Línea de la Vida 800 911 2000</a>{' '}
+                (gratuita, las 24 horas, todos los días).
+              </span>
+            </p>
+          </div>
+
+          {lastColumbia && !columbiaSubmitted && (
+            <div className="p-4 bg-[#F4F0E6] border border-[#E8E2D5] rounded-xl flex items-center justify-between gap-3 text-xs text-[#4A6B53]">
+              <div>
+                <strong>Ya completaste este cuestionario el {new Date(lastColumbia.appliedAt).toLocaleDateString()}.</strong>
+                <br />Si lo deseas, puedes volver a responderlo para actualizar tu evaluación.
+              </div>
+            </div>
+          )}
+
+          {columbiaSubmitted && (
+            <div className="p-6 bg-emerald-50 border-2 border-emerald-400 rounded-2xl flex flex-col items-center justify-center gap-3 text-center">
+              <CheckCircle2 className="w-10 h-10 text-emerald-600" />
+              <h3 className="text-lg font-bold text-emerald-900">Gracias por tus respuestas</h3>
+              <p className="text-sm text-emerald-800">
+                {columbiaHasYes
+                  ? 'Lo que compartiste es importante para nosotros. La Oficina de Psicología se pondrá en contacto contigo lo antes posible.'
+                  : 'Has completado todo el proceso. La Oficina de Psicología revisará tu información. Te esperamos en un mes para ver tu avance.'}
+              </p>
+              <p className="text-xs text-emerald-900">
+                Si en algún momento necesitas hablar con alguien, llama a la{' '}
+                <a href="tel:8009112000" className="font-bold underline">Línea de la Vida 800 911 2000</a>{' '}
+                (gratuita, 24 horas) o acude al Edificio de Desarrollo Académico del ITD.
+              </p>
+              <button onClick={() => setActiveTab('ESTADO')} className="mt-2 px-6 py-2.5 font-bold text-white bg-[#4A6B53] rounded-xl cursor-pointer">
+                Ver mi Estado Final ➔
+              </button>
+            </div>
+          )}
+
+          <div className={`space-y-4 ${columbiaSubmitted ? 'opacity-50 pointer-events-none' : ''}`}>
+            {COLUMBIA_ITEMS.map((item) => {
+              const currentVal = columbiaResponses[item.itemNumber];
+              return (
+                <div key={item.itemNumber} className={`p-4 rounded-xl border transition-all ${currentVal !== undefined ? 'bg-[#A3C9A8]/10 border-[#A3C9A8]/50' : 'bg-white border-[#E8E2D5] hover:border-[#A3C9A8]'}`}>
+                  <div className="font-semibold text-[#2F3E32] text-sm mb-3">
+                    <span className="font-mono text-[#A3C9A8] mr-2">{item.itemNumber}.</span>
+                    {item.text}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs sm:max-w-xs">
+                    {[{ val: 1, label: 'Sí' }, { val: 0, label: 'No' }].map((opt) => (
+                      <button key={opt.val} type="button" onClick={() => setColumbiaResponses((prev) => ({ ...prev, [item.itemNumber]: opt.val }))} className={`w-full p-3 rounded-lg border text-center font-bold cursor-pointer transition-all ${currentVal === opt.val ? 'bg-[#4A6B53] text-white border-[#4A6B53] shadow-sm' : 'bg-[#FDFBF7] text-[#3B4A3F] border-[#E8E2D5] hover:border-[#A3C9A8]'}`}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className={`sticky bottom-4 pt-4 mt-6 border-t border-[#E8E2D5] bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-between gap-3 z-10 ${columbiaSubmitted ? 'hidden' : ''}`}>
+            <div className="text-xs text-[#4A6B53] font-bold">
+              {columbiaAnsweredCount === 6 ? '✅ Todo listo para enviar.' : `Faltan ${6 - columbiaAnsweredCount} preguntas.`}
+            </div>
+            {submitError && (
+              <div className="text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-lg p-2 w-full sm:flex-1">{submitError}</div>
+            )}
+            <button type="button" disabled={columbiaAnsweredCount < 6 || isSubmitting} onClick={handleSendColumbia} className="w-full sm:w-auto px-6 py-3.5 text-sm font-bold text-white bg-[#4A6B53] hover:bg-[#3B5743] disabled:opacity-50 disabled:cursor-not-allowed rounded-xl cursor-pointer inline-flex items-center justify-center gap-2 transition-colors">
+              <Send className="w-4 h-4" /> {isSubmitting ? 'Enviando…' : lastColumbia ? 'Actualizar Evaluación' : 'Enviar Cuestionario 3'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* PESTAÑA 4: ESTADO FINAL */}
       {activeTab === 'ESTADO' && (
         <div className="bg-white border border-[#E8E2D5] rounded-2xl p-4 sm:p-8 space-y-6">
@@ -578,7 +722,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="p-5 border border-[#E8E2D5] rounded-xl bg-[#FDFBF7] space-y-3">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-sm text-[#2F3E32]">1. Sensaciones Físicas (BAI)</span>
@@ -602,6 +746,19 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
               {lastBdi && <p className="text-xs text-[#4A6B53]">Última evaluación: {new Date(lastBdi.appliedAt).toLocaleDateString()}</p>}
               <button onClick={() => { resetBdi(); setActiveTab('BDI'); }} className="mt-2 text-xs font-bold text-[#4A6B53] underline flex items-center gap-1">
                 <RefreshCw className="w-3 h-3" /> Volver a contestar
+              </button>
+            </div>
+
+            <div className="p-5 border border-[#E8E2D5] rounded-xl bg-[#FDFBF7] space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-sm text-[#2F3E32]">3. Bienestar y Seguridad</span>
+                <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${lastColumbia ? 'bg-[#A3C9A8] text-[#2F3E32]' : 'bg-amber-100 text-amber-900'}`}>
+                  {lastColumbia ? 'Evaluado' : 'Pendiente'}
+                </span>
+              </div>
+              {lastColumbia && <p className="text-xs text-[#4A6B53]">Última evaluación: {new Date(lastColumbia.appliedAt).toLocaleDateString()}</p>}
+              <button onClick={() => { resetColumbia(); setActiveTab('COLUMBIA'); }} className="mt-2 text-xs font-bold text-[#4A6B53] underline flex items-center gap-1">
+                <RefreshCw className="w-3 h-3" /> {lastColumbia ? 'Volver a contestar' : 'Contestar ahora'}
               </button>
             </div>
           </div>

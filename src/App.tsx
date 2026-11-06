@@ -87,6 +87,11 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
         } as ClinicalCaseRecord;
       });
 
+      const columbiaByStudent = new Map<string, number>();
+      (casesRes.data ?? []).forEach((c: any) => {
+        if (typeof c.columbia_si_count === 'number') columbiaByStudent.set(c.student_id, c.columbia_si_count);
+      });
+
       const mappedStudents: StudentRecord[] = (studentsRes.data ?? []).map((s: any) => ({
         id: s.id, matricula: s.matricula, fullName: s.full_name, institutionalEmail: s.institutional_email,
         programId: s.academic_program_id ?? '', programName: s.program_name ?? 'Sin asignar', academicDepartment: s.academic_department ?? '',
@@ -95,7 +100,8 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
         gender: s.gender ?? undefined, age: s.age ?? undefined, birthDate: s.birth_date ?? undefined,
         currentAddress: s.current_address ?? undefined, phone: s.phone ?? undefined, maritalStatus: s.marital_status ?? undefined,
         originCity: s.origin_city ?? undefined, 
-        emergencyContact: s.emergency_contact ?? undefined, // <--- AGREGADO
+        emergencyContact: s.emergency_contact ?? undefined,
+        suicideProtocolSiCount: columbiaByStudent.get(s.id),
       }) as StudentRecord);
 
       const users2 = profiles.map((u) => ({
@@ -213,7 +219,7 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
   };
 
   const handleCreateConsultationAssessment = (payload: any) => {
-    const config = INITIAL_INSTRUMENT_CONFIGS[payload.instrumentCode];
+    const config = INITIAL_INSTRUMENT_CONFIGS[payload.instrumentCode as InstrumentCode];
     const detResult = evaluateInstrumentDeterministically(payload.instrumentCode, config, payload.responses);
     const newAssessmentId = `ass-${Date.now()}`;
     const nowIso = new Date().toISOString();
@@ -404,7 +410,7 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
         <main className="p-2 sm:p-6 max-w-[1440px] mx-auto">
           <StudentPortalView
             key={targetStudent.id}
-            currentUser={currentUser} student={targetStudent} clinicalCase={targetCase}
+            currentUser={currentUser} student={targetStudent} clinicalCase={targetCase ?? undefined}
             assessments={assessments.filter((a) => a.studentId === targetStudent.id)}
             onUpdateStudentRecord={async (updated) => {
               if (viewAsStudentMode) throw new Error('Vista previa: no se guardan cambios.');
@@ -418,6 +424,13 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
                 p_instrument: instrumentCode,
                 p_responses: responses,
               });
+              if (error) throw new Error(error.message || 'No se pudo guardar el cuestionario.');
+              await loadMyAssessments();
+            }}
+            onSubmitColumbia={async (responses) => {
+              if (!supabase) throw new Error('Supabase no está configurado.');
+              if (viewAsStudentMode) throw new Error('Vista previa: no se guardan cuestionarios.');
+              const { error } = await supabase.rpc('submit_my_columbia', { p_responses: responses });
               if (error) throw new Error(error.message || 'No se pudo guardar el cuestionario.');
               await loadMyAssessments();
             }}
