@@ -2287,16 +2287,6 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
                               Activar
                             </button>
                           )}
-                          {u.status !== AccountStatus.SUSPENDIDA && (
-                            <button
-                              onClick={() =>
-                                onUpdateUserAccountStatus(u.id, AccountStatus.SUSPENDIDA)
-                              }
-                              className="px-2.5 py-1 text-[11px] font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 rounded cursor-pointer"
-                            >
-                              Suspender
-                            </button>
-                          )}
                           {u.status !== AccountStatus.REVOCADA && (
                             <button
                               onClick={() =>
