@@ -299,6 +299,9 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
       }
     };
 
+    // La carga por lote solo la ve el administrador (Psicología no la necesita y confunde)
+    const canBatchImport = currentUser.role === RoleCode.ADMINISTRADOR;
+
     const handleImportCsvBatch = () => {
       const lines = csvInput
         .split('\n')
@@ -366,7 +369,7 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-5">
+          <div className={`grid grid-cols-1 ${canBatchImport ? 'lg:grid-cols-2' : ''} gap-6 mt-5`}>
             {/* Alta / Recuperación individual (Modalidad B o A) */}
             <form
               onSubmit={handleCreateOrRecoverStudent}
@@ -492,6 +495,7 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
             </form>
 
             {/* Importación controlada desde CSV */}
+            {canBatchImport && (
             <div className="border border-slate-200 rounded-xl p-4 space-y-3 text-xs flex flex-col justify-between">
               <div className="space-y-2">
                 <div className="font-bold text-slate-900 text-sm">
@@ -516,6 +520,7 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
                 Cargar alumnos
               </button>
             </div>
+            )}
           </div>
         </div>
 
