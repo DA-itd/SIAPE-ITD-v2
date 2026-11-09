@@ -5,7 +5,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Activity, BookOpen, ClipboardCheck, Eye, FileBarChart2, FolderKanban,
+  Activity, ClipboardCheck, Eye, FileBarChart2, FolderKanban,
   GraduationCap, LayoutDashboard, Lock, ShieldCheck, UserCog, X,
 } from 'lucide-react';
 import {
@@ -18,6 +18,8 @@ import { ITD_ACADEMIC_PROGRAMS } from './data/academicPrograms';
 import { INITIAL_INSTRUMENT_CONFIGS, evaluateInstrumentDeterministically } from './lib/scoringEngine';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { DashboardView } from './components/DashboardView';
+import { UrgentCasesAlert } from './components/UrgentCasesAlert';
+import { useUrgentCases } from './lib/useUrgentCases';
 import { ClinicalRecordView } from './components/ClinicalRecordView';
 import { ActiveModuleKey, ModulesView } from './components/ModulesView';
 import { StudentPortalView } from './components/StudentPortalView';
@@ -25,7 +27,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { AuthProvider, PROFILE_SELECT, mapProfileRow, useAuth } from './context/AuthContext';
 import { filterCasesForUser, filterStudentsForUser } from './lib/permissionsEngine';
 
-type PrimaryView = 'ARQUITECTURA_ENTREGA_1' | 'PANEL_PRINCIPAL' | 'EXPEDIENTE_UNICO' | 'ESTUDIANTES' | 'EVALUACIONES' | 'SEGUIMIENTO' | 'TUTORIAS' | 'USUARIOS' | 'REPORTES';
+type PrimaryView = 'ARQUITECTURA_ENTREGA_1' | 'PANEL_PRINCIPAL' | 'EXPEDIENTE_UNICO' | 'ESTUDIANTES' | 'EVALUACIONES' | 'SEGUIMIENTO' | 'USUARIOS' | 'REPORTES';
 const EVALUATION_PERIODS: EvaluationPeriod[] = [];
 
 function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: () => void }) {
@@ -45,6 +47,20 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
   const hasUserMutatedState = useRef<boolean>(false);
 
   const currentUser = users.find((u) => u.id === authUser.id) || authUser;
+
+  // Casos urgentes pendientes de contacto: se consultan solos cada minuto (no dependen de la carga general)
+  const isUrgentAlertRole =
+    currentUser.role === RoleCode.PSICOLOGO ||
+    currentUser.role === RoleCode.RESPONSABLE_PSICOLOGIA ||
+    currentUser.role === RoleCode.ADMINISTRADOR;
+  const urgent = useUrgentCases(isUrgentAlertRole && !viewAsStudentMode ? currentUser.role : undefined);
+
+  // El número de casos urgentes aparece en la pestaña del navegador aunque Psicología esté en otra ventana
+  const baseTitleRef = useRef<string>(typeof document !== 'undefined' ? document.title : 'SIAPE-ITD');
+  useEffect(() => {
+    document.title = urgent.count > 0 ? `(${urgent.count}) ${baseTitleRef.current}` : baseTitleRef.current;
+    return () => { document.title = baseTitleRef.current; };
+  }, [urgent.count]);
 
   const loadDirectory = React.useCallback(async () => {
     if (!supabase) return;
@@ -186,6 +202,22 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
       actorName: currentUser.fullName, actorRole: currentUser.role, actionType, targetResource, targetId, details,
       ipSimulated: 'No registrada',
     }, ...prev]);
+  };
+
+  const handleClaimUrgentCase = async (caseId: string) => {
+    if (!supabase) throw new Error('Supabase no está configurado.');
+    const { error } = await supabase.rpc('claim_case', { p_case_id: caseId });
+    if (error) throw new Error(error.message || 'No se pudo tomar el caso.');
+    await urgent.refresh();
+    await loadDirectory();
+  };
+
+  const handleRegisterUrgentContact = async (caseId: string, outcome: 'CITA_PROGRAMADA' | 'EN_ATENCION') => {
+    if (!supabase) throw new Error('Supabase no está configurado.');
+    const { error } = await supabase.rpc('register_case_contact', { p_case: caseId, p_outcome: outcome });
+    if (error) throw new Error(error.message || 'No se pudo registrar el contacto.');
+    await urgent.refresh();
+    await loadDirectory();
   };
 
   const handleOpenClinicalCase = (caseId: string) => {
@@ -361,7 +393,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     { id: 'ESTUDIANTES', label: 'Padrón de Estudiantes', icon: GraduationCap },
     { id: 'EVALUACIONES', label: 'Evaluaciones (BAI y BDI)', icon: ClipboardCheck },
     { id: 'SEGUIMIENTO', label: 'Módulo de Seguimiento', icon: Activity },
-    { id: 'TUTORIAS', label: 'Tutorías Académicas', icon: BookOpen },
     { id: 'USUARIOS', label: 'Usuarios y Accesos', icon: UserCog },
     { id: 'REPORTES', label: 'Reportes e Impresión', icon: FileBarChart2 },
   ] as const;
@@ -455,7 +486,7 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
               const isActive = activeView === item.id;
               return (
                 <button key={item.id} onClick={() => setActiveView(item.id)} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors cursor-pointer text-left ${isActive ? 'bg-[#A3C9A8] text-[#2F3E32] font-bold shadow-sm' : 'text-[#4A6B53] hover:bg-[#E8E2D5] hover:text-[#2F3E32]'}`}>
-                  <Icon className="w-4 h-4 shrink-0" /><span className="truncate">{item.label}</span>
+                  <Icon className="w-4 h-4 shrink-0" /><span className="truncate">{item.label}</span>{item.id === 'PANEL_PRINCIPAL' && urgent.count > 0 && (<span className="ml-auto px-1.5 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-bold font-mono">{urgent.count}</span>)}
                 </button>
               );
             })}
@@ -490,13 +521,29 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
         <main className="flex-1 p-4 md:p-6 max-w-[1440px] w-full mx-auto bg-[#FDFBF7]">
           {dataLoading ? (<div className="p-6 text-sm text-[#4A6B53]">Cargando información…</div>) : dataError ? (<div className="p-4 rounded-xl border border-rose-200 bg-rose-50 text-sm text-rose-900">{dataError}</div>) : (
             <>
+              {isUrgentAlertRole && (
+                <UrgentCasesAlert
+                  role={currentUser.role}
+                  currentProfileId={currentUser.id}
+                  rows={urgent.rows}
+                  count={urgent.count}
+                  error={urgent.error}
+                  lastUpdated={urgent.lastUpdated}
+                  mode={activeView === 'PANEL_PRINCIPAL' ? 'full' : 'compact'}
+                  onRefresh={urgent.refresh}
+                  onClaim={handleClaimUrgentCase}
+                  onRegisterContact={handleRegisterUrgentContact}
+                  onOpenCase={handleOpenClinicalCase}
+                  onGoToPanel={() => setActiveView('PANEL_PRINCIPAL')}
+                />
+              )}
               {activeView === 'PANEL_PRINCIPAL' && (
                 <DashboardView currentUser={currentUser} students={authorizedStudents} cases={authorizedCases} assessments={assessments} tasks={tasks} programs={ITD_ACADEMIC_PROGRAMS} psychologists={users.filter((u) => u.role === RoleCode.PSICOLOGO)} allUsers={users} onOpenClinicalCase={handleOpenClinicalCase} onQuickAssignPsychologist={(caseId, psychId) => handleAssignCaseResponsible(caseId, psychId, null)} onNavigateModule={(modKey) => setActiveView(modKey as PrimaryView)} />
               )}
               {activeView === 'EXPEDIENTE_UNICO' && (!selectedClinicalCase || !selectedStudent ? (<div className="p-6 text-sm text-[#4A6B53] bg-white border border-[#E8E2D5] rounded-xl">Aún no hay expedientes disponibles.</div>) : (
                 <ClinicalRecordView currentUser={currentUser} clinicalCase={selectedClinicalCase} student={selectedStudent} assessments={assessments} sessions={sessions} tasks={tasks} auditLogs={auditLogs} instrumentConfigs={INITIAL_INSTRUMENT_CONFIGS} psychologists={users.filter((u) => u.role === RoleCode.PSICOLOGO)} interns={users.filter((u) => u.role === RoleCode.PRACTICANTE)} onBack={() => setActiveView('PANEL_PRINCIPAL')} onCreateConsultationAssessment={handleCreateConsultationAssessment} onRegisterSession={handleRegisterSession} onManualPriorityElevation={handleManualPriorityElevation} onEmitTutorAlert={handleEmitTutorAlert} />
               ))}
-              {(activeView === 'ESTUDIANTES' || activeView === 'EVALUACIONES' || activeView === 'SEGUIMIENTO' || activeView === 'TUTORIAS' || activeView === 'USUARIOS' || activeView === 'REPORTES') && (
+              {(activeView === 'ESTUDIANTES' || activeView === 'EVALUACIONES' || activeView === 'SEGUIMIENTO' || activeView === 'USUARIOS' || activeView === 'REPORTES') && (
                 <ModulesView activeModule={activeView as ActiveModuleKey} currentUser={currentUser} users={users} students={authorizedStudents} cases={authorizedCases} assessments={assessments} tasks={tasks} tutorAlerts={tutorAlerts} auditLogs={auditLogs} periods={EVALUATION_PERIODS} programs={ITD_ACADEMIC_PROGRAMS} instrumentConfigs={INITIAL_INSTRUMENT_CONFIGS} onOpenClinicalCase={handleOpenClinicalCase} onRegisterStudentAndSingleCase={handleRegisterStudentAndSingleCase} onCompleteFollowUpTask={handleCompleteFollowUpTask} onAssignCaseResponsible={handleAssignCaseResponsible} onRegisterTutorAction={handleRegisterTutorAction} onCreateUserProfile={handleCreateUserProfile} onUpdateUserAccountStatus={handleUpdateUserAccountStatus} onLogReportExport={(repName, fmt, filters) => appendAuditLog('EXPORTACION_REPORTE', 'reports', repName, `Exportación ${fmt}`)} onStudentSubmitSelfAssessment={handleStudentSubmitSelfAssessment} onCreateConsultationAssessment={handleCreateConsultationAssessment} />
               )}
             </>
