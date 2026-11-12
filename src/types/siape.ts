@@ -68,6 +68,7 @@ export interface UserProfile {
   professionalLicense?: string; // Cédula profesional cuando aplica
   assignedCaseIds: string[]; // Expedientes autorizados explícitamente (RLS)
   linkedStudentId?: string | null; // Vínculo cuando role === ESTUDIANTE
+  hasAuthAccount?: boolean; // false = cuenta sin acceso (dada de baja o pendiente de primer ingreso)
 }
 
 // 2. academic_programs
@@ -276,6 +277,16 @@ export interface PriorityChangeRecord {
   acknowledgedAt: string | null;
 }
 
+export interface CaseAssignmentHistoryEntry {
+  id: string;
+  userId: string;
+  userName: string;
+  role: 'PSICOLOGO_RESPONSABLE' | 'PRACTICANTE_SUPERVISADO';
+  isActive: boolean;
+  assignedAt: string | null;
+  revokedAt: string | null;
+}
+
 // 11. clinical_cases (EXPEDIENTE PSICOLÓGICO ÚNICO POR ESTUDIANTE)
 export interface ClinicalCaseRecord {
   id: string; // Identificador interno del expediente único (ej. EXP-ITD-2026-001)
@@ -283,6 +294,7 @@ export interface ClinicalCaseRecord {
   openedAt: string;
   updatedAt: string;
   modalityOrigin: AttentionModality;
+  assignmentHistory?: CaseAssignmentHistoryEntry[];
   // Indicadores independientes vinculados a cada instrumento y su versión
   anxietyIndicator: {
     lastAssessmentId: string | null;

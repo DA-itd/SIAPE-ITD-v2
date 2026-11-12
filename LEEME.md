@@ -7,14 +7,16 @@
      expedientes que acaban de crearse sin responsable, permite leer sus evaluaciones
      y crea el expediente de cualquier alumno registrado que se haya quedado sin él.
    - `supabase/20261112_admin_eliminar_usuarios.sql`: habilita al superadministrador
-     eliminar cuentas de psicólogos, practicantes, responsables y tutores desde
-     “Usuarios y Accesos”. Libera sus expedientes y borra la cuenta de Google.
+     dar de baja cuentas de psicólogos, practicantes, responsables y tutores desde
+     “Usuarios y Accesos”. Borra su acceso con Google y conserva el perfil, las
+     asignaciones, las sesiones y la bitácora como historial.
    Al final del primer script se imprime un conteo de alumnos/expedientes para verificar.
 2. Recompila y vuelve a desplegar la app (`npm run build` o el deploy de Vercel).
 3. El alumno ya elige su carrera desde un menú en “Mis Datos”; el psicólogo ve una bandeja
    “Registros nuevos” en el Panel Principal con el botón **Tomar caso**.
 4. En “Usuarios y Accesos”, el superadministrador ve el botón **Eliminar** en cada cuenta
-   de personal (no en alumnos ni en su propia cuenta).
+   de personal (no en alumnos ni en su propia cuenta). La cuenta queda como REVOCADA y su
+   historial sigue visible en el módulo y en el expediente de cada alumno.
 
 ## 1. Supabase
 

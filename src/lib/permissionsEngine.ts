@@ -1,4 +1,4 @@
-import { ClinicalCaseRecord, RoleCode, StudentRecord, UserProfile } from '../types/siape';
+import { AccountStatus, ClinicalCaseRecord, RoleCode, StudentRecord, UserProfile } from '../types/siape';
 
 /**
  * SIAPE-ITD | Motor de Jerarquía de Acceso y Visibilidad RLS
@@ -22,7 +22,10 @@ import { ClinicalCaseRecord, RoleCode, StudentRecord, UserProfile } from '../typ
 
 export function getSupervisedInterns(psychologistId: string, users: UserProfile[]): UserProfile[] {
   return users.filter(
-    (u) => u.role === RoleCode.PRACTICANTE && u.supervisorId === psychologistId
+    (u) =>
+      u.role === RoleCode.PRACTICANTE &&
+      u.status === AccountStatus.ACTIVA &&
+      u.supervisorId === psychologistId
   );
 }
 

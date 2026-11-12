@@ -1,19 +1,22 @@
 -- ============================================================================
--- SIAPE-ITD | ELIMINACIÓN DEFINITIVA DE CUENTAS DE PERSONAL (SUPERADMIN)
+-- SIAPE-ITD | BAJA DE CUENTAS DE PERSONAL CONSERVANDO EL HISTORIAL
 -- ----------------------------------------------------------------------------
 -- QUÉ HACE:
---   El superadministrador puede eliminar psicólogos, practicantes, responsables
---   y tutores desde "Usuarios y Accesos". La función:
+--   El superadministrador puede dar de baja psicólogos, practicantes,
+--   responsables y tutores desde "Usuarios y Accesos". La función:
 --     1. Verifica que quien ejecuta sea ADMINISTRADOR activo.
 --     2. Impide eliminar la propia cuenta, la última cuenta de administrador
 --        y las cuentas de alumnos.
---     3. Libera sus expedientes (quedan sin responsable y regresan a la
---        bandeja de "Registros nuevos").
---     4. Quita todas las referencias (asignaciones, supervisión, roles,
---        tutorías, altas/autorizaciones) para no dejar llaves colgando.
---     5. Borra la cuenta de Google (auth.users) y el perfil.
---     6. Elimina su correo de authorized_users para que no se vuelva a crear
---        la cuenta al iniciar sesión.
+--     3. Libera sus expedientes actuales (quedan sin responsable y regresan a
+--        la bandeja de "Registros nuevos").
+--     4. DESACTIVA sus asignaciones, roles y tutorías, pero NO las borra:
+--        el perfil, las asignaciones históricas, las sesiones, las tareas y
+--        la bitácora se conservan para consultar el historial.
+--     5. Borra la cuenta de Google (auth.users) para que no pueda volver a
+--        entrar, y elimina su correo de authorized_users.
+--     6. Deja el perfil con estado REVOCADA y sin auth_user_id. Así sigue
+--        apareciendo en "Usuarios y Accesos" como cuenta eliminada con
+--        historial, pero sin acceso al sistema.
 --     7. Registra el movimiento en audit_logs.
 --
 -- CÓMO EJECUTARLO:
@@ -21,9 +24,9 @@
 --   Es idempotente: se puede ejecutar más de una vez.
 --
 -- NOTA:
---   Si una cuenta tiene datos ligados que impiden el borrado, la operación
---   completa se cancela y la app muestra el error. En ese caso usa "Revocar",
---   que le quita el acceso sin borrar el historial.
+--   El nombre y el correo del perfil se conservan para identificar quién
+--   atendió, supervisó o asignó cada expediente. Lo único que se elimina es
+--   el acceso (cuenta de Google y roles activos).
 -- ============================================================================
 
 CREATE OR REPLACE FUNCTION public.admin_delete_user(p_profile_id UUID)
@@ -47,7 +50,7 @@ BEGIN
       AND p.account_status = 'ACTIVA'
       AND p.role_code = 'ADMINISTRADOR'
   ) THEN
-    RAISE EXCEPTION 'Solo el superadministrador puede eliminar cuentas.';
+    RAISE EXCEPTION 'Solo el superadministrador puede dar de baja cuentas.';
   END IF;
 
   SELECT p.role_code::text, p.auth_user_id, p.email, p.full_name
@@ -78,6 +81,8 @@ BEGIN
   END IF;
 
   -- 2. Liberar los expedientes que tenía a cargo -----------------------------
+  --    Se limpia el responsable ACTUAL para que el caso regrese a la bandeja.
+  --    La asignación histórica se conserva en case_assignments (is_active=false).
   UPDATE public.clinical_cases cc
   SET assigned_psychologist_name = NULL
   WHERE EXISTS (
@@ -107,67 +112,62 @@ BEGIN
   SET assigned_intern_name = NULL
   WHERE assigned_intern_name = v_name;
 
-  -- 3. Quitar referencias antes de borrar el perfil --------------------------
+  -- 3. Baja lógica: desactivar, NO borrar -----------------------------------
   UPDATE public.case_assignments
   SET is_active = false, revoked_at = now()
   WHERE assigned_user_id = p_profile_id AND is_active = true;
 
-  DELETE FROM public.case_assignments WHERE assigned_user_id = p_profile_id;
+  UPDATE public.user_role_assignments
+  SET is_active = false, revoked_at = now()
+  WHERE user_id = p_profile_id AND is_active = true;
 
-  UPDATE public.case_assignments
-  SET supervisor_psychologist_id = NULL
-  WHERE supervisor_psychologist_id = p_profile_id;
+  UPDATE public.tutor_assignments
+  SET is_active = false
+  WHERE tutor_user_id = p_profile_id AND is_active = true;
 
-  UPDATE public.case_assignments
-  SET assigned_by = NULL
-  WHERE assigned_by = p_profile_id;
-
+  -- 4. Supervisión activa: los practicantes quedan sin supervisor vigente,
+  --    pero el vínculo histórico se conserva en las filas desactivadas.
   UPDATE public.profiles
   SET supervisor_id = NULL
   WHERE supervisor_id = p_profile_id;
 
+  UPDATE public.case_assignments
+  SET supervisor_psychologist_id = NULL
+  WHERE supervisor_psychologist_id = p_profile_id AND is_active = true;
+
   UPDATE public.user_role_assignments
   SET supervisor_psychologist_id = NULL
-  WHERE supervisor_psychologist_id = p_profile_id;
+  WHERE supervisor_psychologist_id = p_profile_id AND is_active = true;
 
-  UPDATE public.user_role_assignments
-  SET assigned_by = NULL
-  WHERE assigned_by = p_profile_id;
-
-  DELETE FROM public.user_role_assignments WHERE user_id = p_profile_id;
-
-  DELETE FROM public.tutor_assignments WHERE tutor_user_id = p_profile_id;
-
-  UPDATE public.authorized_users SET added_by = NULL WHERE added_by = p_profile_id;
-  UPDATE public.evaluation_periods SET created_by = NULL WHERE created_by = p_profile_id;
-  UPDATE public.instrument_versions SET approved_by = NULL WHERE approved_by = p_profile_id;
-  UPDATE public.scoring_rules SET approved_by = NULL WHERE approved_by = p_profile_id;
-
-  -- 4. Evitar que la cuenta se vuelva a provisionar al iniciar sesión --------
+  -- 5. Evitar que la cuenta se vuelva a provisionar al iniciar sesión --------
   DELETE FROM public.authorized_users WHERE lower(email) = lower(v_email);
 
-  -- 5. Si la persona también tenía registro de alumno, conservar el historial
+  -- 6. Si la persona también tenía registro de alumno, conservar el historial
   UPDATE public.students SET auth_user_id = NULL WHERE auth_user_id = v_auth;
 
-  -- 6. Borrar la cuenta de Google y el perfil -------------------------------
+  -- 7. Quitar el acceso con Google (NO se borra el perfil) -------------------
   IF v_auth IS NOT NULL THEN
     DELETE FROM auth.users WHERE id = v_auth;
   END IF;
 
-  DELETE FROM public.profiles WHERE id = p_profile_id;
+  UPDATE public.profiles
+  SET auth_user_id = NULL,
+      account_status = 'REVOCADA',
+      updated_at = now()
+  WHERE id = p_profile_id;
 
-  -- 7. Bitácora (si la tabla cambió, no debe impedir el borrado) -------------
+  -- 8. Bitácora (si la tabla cambió, no debe impedir la baja) ----------------
   BEGIN
     INSERT INTO public.audit_logs (
       actor_name, actor_role, action_type, target_table, target_record_id, details
     )
     SELECT
       p.full_name, p.role_code, 'MODIFICACION_ROL_CUENTA', 'profiles', p_profile_id::text,
-      format('Cuenta eliminada: %s (%s) · rol %s', v_name, v_email, v_role)
+      format('Cuenta dada de baja (historial conservado): %s (%s) · rol %s', v_name, v_email, v_role)
     FROM public.profiles p
     WHERE p.auth_user_id = auth.uid();
   EXCEPTION WHEN OTHERS THEN
-    RAISE WARNING 'No se pudo registrar la eliminación en audit_logs: %', SQLERRM;
+    RAISE WARNING 'No se pudo registrar la baja en audit_logs: %', SQLERRM;
   END;
 END;
 $$;

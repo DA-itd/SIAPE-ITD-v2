@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import {
   AcademicProgram, AcademicSupportAlert, AccountStatus, AssessmentRecord, AssessmentStatus,
-  AttentionModality, AuditLogEntry, CaseFollowUpState, ClinicalCaseRecord,
+  AttentionModality, AuditLogEntry, CaseAssignmentHistoryEntry, CaseFollowUpState, ClinicalCaseRecord,
   EvaluationPeriod, FollowUpTask, InstrumentCode, PriorityLevel,
   PsychologySession, RoleCode, StudentRecord, UserProfile,
 } from './types/siape';
@@ -26,7 +26,7 @@ import { AuthProvider, PROFILE_SELECT, mapProfileRow, useAuth } from './context/
 import { filterCasesForUser, filterStudentsForUser } from './lib/permissionsEngine';
 
 type PrimaryView = 'ARQUITECTURA_ENTREGA_1' | 'PANEL_PRINCIPAL' | 'EXPEDIENTE_UNICO' | 'ESTUDIANTES' | 'EVALUACIONES' | 'SEGUIMIENTO' | 'USUARIOS' | 'REPORTES';
-const APP_VERSION = '2026.11.12-3';
+const APP_VERSION = '2026.11.12-4';
 const EVALUATION_PERIODS: EvaluationPeriod[] = [];
 
 function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: () => void }) {
@@ -59,7 +59,7 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
         supabase.from('profiles').select(PROFILE_SELECT),
         supabase.from('students').select('*'),
         supabase.from('clinical_cases').select('*'),
-        supabase.from('case_assignments').select('clinical_case_id, assigned_user_id, assignment_role, is_active'),
+        supabase.from('case_assignments').select('id, clinical_case_id, assigned_user_id, assignment_role, is_active, assigned_at, revoked_at'),
         supabase.from('academic_programs').select('id, code, name, academic_department, is_active').order('name'),
         assessmentsQuery,
       ]);
@@ -80,6 +80,27 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
         activeAssignments.set(x.clinical_case_id, list);
       });
 
+      // Historial completo (activo e inactivo). Se conserva aunque la cuenta
+      // del psicólogo o practicante se haya dado de baja.
+      const historyByCase = new Map<string, CaseAssignmentHistoryEntry[]>();
+      (assignmentsRes.data ?? []).forEach((x: any) => {
+        const prof = profileById.get(x.assigned_user_id);
+        const list = historyByCase.get(x.clinical_case_id) ?? [];
+        list.push({
+          id: x.id ?? `${x.clinical_case_id}-${x.assigned_user_id}-${x.assignment_role}`,
+          userId: x.assigned_user_id,
+          userName: prof?.fullName ?? 'Usuario no disponible',
+          role: x.assignment_role,
+          isActive: !!x.is_active,
+          assignedAt: x.assigned_at ?? null,
+          revokedAt: x.revoked_at ?? null,
+        });
+        historyByCase.set(x.clinical_case_id, list);
+      });
+      historyByCase.forEach((list) => {
+        list.sort((a, b) => (b.assignedAt ?? '').localeCompare(a.assignedAt ?? ''));
+      });
+
       const indicator = (s: any, v: any, c: any, a: any) => ({ lastAssessmentId: null, instrumentVersion: v ?? null, score: s ?? null, category: c ?? null, evaluatedAt: a ?? null });
 
       const mappedCases: ClinicalCaseRecord[] = (casesRes.data ?? []).map((c: any) => {
@@ -98,6 +119,7 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
           followUpState: c.follow_up_state, lastEvaluationDate: c.anxiety_evaluated_at ?? c.depression_evaluated_at ?? null,
           nextFollowUpAction: c.next_follow_up_action ?? '', nextFollowUpDate: c.next_follow_up_date ?? null,
           generalClinicalSummary: c.general_clinical_summary ?? '', referrals: [], priorityHistory: [],
+          assignmentHistory: historyByCase.get(c.id) ?? [],
         } as ClinicalCaseRecord;
       });
 
@@ -433,8 +455,12 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     const target = users.find((u) => u.id === targetUserId);
     const { error } = await supabase.rpc('admin_delete_user', { p_profile_id: targetUserId });
     if (error) throw new Error(error.message || 'No se pudo eliminar la cuenta.');
-    setUsers((prev) => prev.filter((u) => u.id !== targetUserId));
-    appendAuditLog('MODIFICACION_ROL_CUENTA', 'profiles', targetUserId, `Cuenta eliminada: ${target?.email ?? targetUserId}`);
+    setUsers((prev) => prev.map((u) => (
+      u.id === targetUserId
+        ? { ...u, status: AccountStatus.REVOCADA, hasAuthAccount: false }
+        : u
+    )));
+    appendAuditLog('MODIFICACION_ROL_CUENTA', 'profiles', targetUserId, `Cuenta dada de baja (historial conservado): ${target?.email ?? targetUserId}`);
     await loadDirectory();
   };
 
@@ -600,10 +626,10 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
           {dataLoading ? (<div className="p-6 text-sm text-[#4A6B53]">Cargando información…</div>) : dataError ? (<div className="p-4 rounded-xl border border-rose-200 bg-rose-50 text-sm text-rose-900">{dataError}</div>) : (
             <>
               {activeView === 'PANEL_PRINCIPAL' && (
-                <DashboardView currentUser={currentUser} students={authorizedStudents} cases={authorizedCases} assessments={assessments} tasks={tasks} programs={programs} psychologists={users.filter((u) => u.role === RoleCode.PSICOLOGO)} allUsers={users} onOpenClinicalCase={handleOpenClinicalCase} onClaimCase={handleClaimCase} onQuickAssignPsychologist={(caseId, psychId) => handleAssignCaseResponsible(caseId, psychId, null)} onNavigateModule={(modKey) => setActiveView(modKey as PrimaryView)} />
+                <DashboardView currentUser={currentUser} students={authorizedStudents} cases={authorizedCases} assessments={assessments} tasks={tasks} programs={programs} psychologists={users.filter((u) => u.role === RoleCode.PSICOLOGO && u.status === AccountStatus.ACTIVA)} allUsers={users} onOpenClinicalCase={handleOpenClinicalCase} onClaimCase={handleClaimCase} onQuickAssignPsychologist={(caseId, psychId) => handleAssignCaseResponsible(caseId, psychId, null)} onNavigateModule={(modKey) => setActiveView(modKey as PrimaryView)} />
               )}
               {activeView === 'EXPEDIENTE_UNICO' && (!selectedClinicalCase || !selectedStudent ? (<div className="p-6 text-sm text-[#4A6B53] bg-white border border-[#E8E2D5] rounded-xl">Aún no hay expedientes disponibles.</div>) : (
-                <ClinicalRecordView currentUser={currentUser} clinicalCase={selectedClinicalCase} student={selectedStudent} assessments={assessments} sessions={sessions} tasks={tasks} auditLogs={auditLogs} instrumentConfigs={INITIAL_INSTRUMENT_CONFIGS} psychologists={users.filter((u) => u.role === RoleCode.PSICOLOGO)} interns={users.filter((u) => u.role === RoleCode.PRACTICANTE)} onBack={() => setActiveView('PANEL_PRINCIPAL')} onCreateConsultationAssessment={handleCreateConsultationAssessment} onRegisterSession={handleRegisterSession} onManualPriorityElevation={handleManualPriorityElevation} onEmitTutorAlert={handleEmitTutorAlert} />
+                <ClinicalRecordView currentUser={currentUser} clinicalCase={selectedClinicalCase} student={selectedStudent} assessments={assessments} sessions={sessions} tasks={tasks} auditLogs={auditLogs} instrumentConfigs={INITIAL_INSTRUMENT_CONFIGS} psychologists={users.filter((u) => u.role === RoleCode.PSICOLOGO && u.status === AccountStatus.ACTIVA)} interns={users.filter((u) => u.role === RoleCode.PRACTICANTE && u.status === AccountStatus.ACTIVA)} onBack={() => setActiveView('PANEL_PRINCIPAL')} onCreateConsultationAssessment={handleCreateConsultationAssessment} onRegisterSession={handleRegisterSession} onManualPriorityElevation={handleManualPriorityElevation} onEmitTutorAlert={handleEmitTutorAlert} />
               ))}
               {(activeView === 'ESTUDIANTES' || activeView === 'EVALUACIONES' || activeView === 'SEGUIMIENTO' || activeView === 'USUARIOS' || activeView === 'REPORTES') && (
                 <ModulesView activeModule={activeView as ActiveModuleKey} currentUser={currentUser} users={users} students={authorizedStudents} cases={authorizedCases} assessments={assessments} tasks={tasks} tutorAlerts={tutorAlerts} auditLogs={auditLogs} periods={EVALUATION_PERIODS} programs={programs} instrumentConfigs={INITIAL_INSTRUMENT_CONFIGS} onOpenClinicalCase={handleOpenClinicalCase} onRegisterStudentAndSingleCase={handleRegisterStudentAndSingleCase} onCompleteFollowUpTask={handleCompleteFollowUpTask} onAssignCaseResponsible={handleAssignCaseResponsible} onRegisterTutorAction={handleRegisterTutorAction} onCreateUserProfile={handleCreateUserProfile} onUpdateUserAccountStatus={handleUpdateUserAccountStatus} onDeleteUser={handleDeleteUser} onLogReportExport={(repName, fmt, filters) => appendAuditLog('EXPORTACION_REPORTE', 'reports', repName, `Exportación ${fmt}`)} onStudentSubmitSelfAssessment={handleStudentSubmitSelfAssessment} onCreateConsultationAssessment={handleCreateConsultationAssessment} />

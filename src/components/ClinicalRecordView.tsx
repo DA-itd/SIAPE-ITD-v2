@@ -217,6 +217,10 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
     [tasks, clinicalCase.id]
   );
 
+  // Historial de responsables: incluye asignaciones activas e inactivas, de modo
+  // que las cuentas dadas de baja sigan apareciendo en el expediente.
+  const assignmentHistory = clinicalCase.assignmentHistory ?? [];
+
   const caseAuditLogs = useMemo(
     () =>
       auditLogs.filter(
@@ -664,6 +668,74 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
             </div>
           )}
         </div>
+      </div>
+
+      {/* HISTORIAL DE RESPONSABLES: SE CONSERVA AUNQUE LA CUENTA SE DÉ DE BAJA */}
+      <div className="bg-white border border-slate-200 rounded-xl p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">
+              Historial de responsables del expediente
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Incluye asignaciones activas y anteriores. Se conserva aunque la cuenta del psicólogo o
+              practicante se haya dado de baja.
+            </p>
+          </div>
+          <span className="text-[11px] font-mono text-slate-500">
+            {assignmentHistory.length} asignación(es)
+          </span>
+        </div>
+
+        {assignmentHistory.length === 0 ? (
+          <p className="mt-4 text-xs text-slate-500">
+            Este expediente todavía no tiene asignaciones registradas.
+          </p>
+        ) : (
+          <div className="mt-4 overflow-x-auto border border-slate-200 rounded-lg">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-700">
+                  <th className="py-2.5 px-3 font-semibold">Rol</th>
+                  <th className="py-2.5 px-3 font-semibold">Profesional</th>
+                  <th className="py-2.5 px-3 font-semibold">Desde</th>
+                  <th className="py-2.5 px-3 font-semibold">Baja de la asignación</th>
+                  <th className="py-2.5 px-3 font-semibold">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {assignmentHistory.map((entry) => (
+                  <tr key={entry.id} className="hover:bg-slate-50/80">
+                    <td className="py-2.5 px-3 font-medium text-slate-800">
+                      {entry.role === 'PSICOLOGO_RESPONSABLE'
+                        ? 'Psicólogo responsable'
+                        : entry.role === 'PRACTICANTE_SUPERVISADO'
+                          ? 'Practicante supervisado'
+                          : entry.role}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <div className="font-bold text-slate-900">{entry.userName}</div>
+                      <div className="text-[10px] font-mono text-slate-500">{entry.userId.slice(0, 8)}</div>
+                    </td>
+                    <td className="py-2.5 px-3 font-mono text-slate-700">
+                      {entry.assignedAt ? entry.assignedAt.slice(0, 10) : '—'}
+                    </td>
+                    <td className="py-2.5 px-3 font-mono text-slate-700">
+                      {entry.revokedAt ? entry.revokedAt.slice(0, 10) : '—'}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      {entry.isActive ? (
+                        <span className="font-bold text-emerald-700">ACTIVO</span>
+                      ) : (
+                        <span className="font-semibold text-slate-500">HISTÓRICO</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* SECCIÓN D: ANTECEDENTES PSICOPEDAGÓGICOS, SOCIODEMOGRÁFICOS Y FACTORES DE RIESGO (CUESTIONARIO INSTITUCIONAL 2025) */}

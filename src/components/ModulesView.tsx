@@ -2089,13 +2089,11 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
       const assigned = cases.filter(
         (c) => c.assignedPsychologistId === u.id || c.assignedInternId === u.id
       ).length;
-      const extra = assigned > 0
-        ? ` Sus ${assigned} expediente(s) quedarán sin responsable y volverán a la bandeja de casos nuevos.`
-        : '';
+      const extra = assigned > 0 ? ` Actualmente tiene ${assigned} expediente(s) a cargo.` : '';
       const ok = window.confirm(
-        `¿Eliminar definitivamente la cuenta de ${u.fullName} (${u.email})?\n\n` +
-        `Se borrará su acceso con Google y ya no podrá entrar con esa cuenta.${extra}\n\n` +
-        'Esta acción no se puede deshacer.'
+        `¿Dar de baja la cuenta de ${u.fullName} (${u.email})?\n\n` +
+        `Se borrará su acceso con Google, pero se conservará su historial: perfil, asignaciones, sesiones y bitácora.${extra}\n\n` +
+        'Los expedientes quedarán sin responsable actual y volverán a la bandeja de casos nuevos. La cuenta quedará como REVOCADA.'
       );
       if (!ok) return;
       setDeletingUserId(u.id);
@@ -2288,6 +2286,11 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
                       {u.status === AccountStatus.REVOCADA && (
                         <span className="text-rose-700">REVOCADA</span>
                       )}
+                      {!u.hasAuthAccount && u.status === AccountStatus.REVOCADA && (
+                        <div className="text-[10px] font-normal text-slate-500">
+                          Cuenta eliminada · historial conservado
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-3 text-slate-600">
                       {u.supervisorName && (
@@ -2310,6 +2313,10 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
                       {u.id === currentUser.id ? (
                         <span className="text-[11px] text-slate-400">
                           Sesión actual (Protección anti-autoedición)
+                        </span>
+                      ) : (!u.hasAuthAccount && u.status === AccountStatus.REVOCADA) ? (
+                        <span className="text-[11px] text-slate-400">
+                          Historial conservado · sin acceso
                         </span>
                       ) : (
                         <>
@@ -2351,9 +2358,10 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
 
           {currentUser.role === RoleCode.ADMINISTRADOR && (
             <p className="mt-2 text-[11px] text-slate-500">
-              <strong>Eliminar</strong> borra la cuenta de Google y el perfil del usuario; sus expedientes quedan
-              sin responsable y regresan a la bandeja de casos nuevos. No se pueden eliminar cuentas de alumnos
-              ni la propia cuenta.
+              <strong>Eliminar</strong> da de baja la cuenta: borra su acceso con Google, desactiva sus roles y
+              <strong> conserva su historial</strong> (perfil, asignaciones, sesiones y bitácora). Sus expedientes
+              quedan sin responsable y regresan a la bandeja de casos nuevos. No se pueden eliminar cuentas de
+              alumnos ni la propia cuenta.
             </p>
           )}
         </div>

@@ -33,6 +33,7 @@ export function mapProfileRow(row: any): UserProfile {
     professionalLicense: row.professional_license ?? undefined,
     assignedCaseIds: [],
     linkedStudentId: null,
+    hasAuthAccount: Boolean(row.auth_user_id),
   } as UserProfile;
 }
 
