@@ -26,6 +26,7 @@ import { AuthProvider, PROFILE_SELECT, mapProfileRow, useAuth } from './context/
 import { filterCasesForUser, filterStudentsForUser } from './lib/permissionsEngine';
 
 type PrimaryView = 'ARQUITECTURA_ENTREGA_1' | 'PANEL_PRINCIPAL' | 'EXPEDIENTE_UNICO' | 'ESTUDIANTES' | 'EVALUACIONES' | 'SEGUIMIENTO' | 'USUARIOS' | 'REPORTES';
+const APP_VERSION = '2026.11.12-3';
 const EVALUATION_PERIODS: EvaluationPeriod[] = [];
 
 function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: () => void }) {
@@ -570,6 +571,7 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
         </div>
         <div className="p-4 border-t border-[#E8E2D5] text-[11px] text-[#4A6B53]">
           <div className="font-semibold text-[#2F3E32] flex items-center gap-1.5 mb-2"><ShieldCheck className="w-3.5 h-3.5" /> Supabase (Conectado)</div>
+          <div className="font-mono text-[10px] text-[#4A6B53]/80">Versión {APP_VERSION}</div>
         </div>
       </aside>
 
