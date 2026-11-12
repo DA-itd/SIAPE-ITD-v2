@@ -1,5 +1,23 @@
 # SIAPE-ITD · Etapa 1: autenticación real y arranque sin datos ficticios
 
+## Corrección 12/11/2026 · registros nuevos y menú de carreras
+
+1. En Supabase → SQL Editor ejecuta **una vez** estos dos archivos:
+   - `supabase/20261112_visibilidad_casos_nuevos.sql`: hace que el psicólogo vea los
+     expedientes que acaban de crearse sin responsable, permite leer sus evaluaciones
+     y crea el expediente de cualquier alumno registrado que se haya quedado sin él.
+   - `supabase/20261112_admin_eliminar_usuarios.sql`: habilita al superadministrador
+     eliminar cuentas de psicólogos, practicantes, responsables y tutores desde
+     “Usuarios y Accesos”. Libera sus expedientes y borra la cuenta de Google.
+   Al final del primer script se imprime un conteo de alumnos/expedientes para verificar.
+2. Recompila y vuelve a desplegar la app (`npm run build` o el deploy de Vercel).
+3. El alumno ya elige su carrera desde un menú en “Mis Datos”; el psicólogo ve una bandeja
+   “Registros nuevos” en el Panel Principal con el botón **Tomar caso**.
+4. En “Usuarios y Accesos”, el superadministrador ve el botón **Eliminar** en cada cuenta
+   de personal (no en alumnos ni en su propia cuenta).
+
+## 1. Supabase
+
 Versión para el esquema REAL de tu Supabase (profiles con `auth_user_id` y `role_code`).
 
 ## 1. Supabase

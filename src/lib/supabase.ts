@@ -6,8 +6,16 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
  * - Los SQL (esquema, RLS, alta de usuarios) viven en /supabase/*.sql y se ejecutan en el SQL Editor.
  */
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const rawSupabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
+// Acepta tanto https://proyecto.supabase.co como https://proyecto.supabase.co/rest/v1/
+// (el cliente de Supabase agrega /rest/v1 y /auth/v1 por su cuenta).
+const supabaseUrl = rawSupabaseUrl
+  ? rawSupabaseUrl
+      .replace(/\/+$/, '')
+      .replace(/\/rest\/v1$/i, '')
+      .replace(/\/+$/, '')
+  : undefined;
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl &&

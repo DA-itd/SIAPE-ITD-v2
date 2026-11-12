@@ -45,6 +45,24 @@ export function canUserViewClinicalCase(
     if (clinicalCase.assignedPsychologistId === currentUser.id) {
       return true;
     }
+    // Algunos flujos guardan solo el nombre del responsable en el expediente.
+    if (
+      !clinicalCase.assignedPsychologistId &&
+      clinicalCase.assignedPsychologistName &&
+      clinicalCase.assignedPsychologistName.trim().toLowerCase() === currentUser.fullName.trim().toLowerCase()
+    ) {
+      return true;
+    }
+    // Caso nuevo / sin responsable: debe poder verlo para valorarlo y tomarlo.
+    // Es la bandeja de registros recientes (el alumno ya se registró y contestó).
+    if (
+      !clinicalCase.assignedPsychologistId &&
+      !clinicalCase.assignedInternId &&
+      !clinicalCase.assignedPsychologistName &&
+      !clinicalCase.assignedInternName
+    ) {
+      return true;
+    }
     // O caso tratado por un practicante bajo su supervisión
     if (clinicalCase.assignedInternId) {
       const myInterns = getSupervisedInterns(currentUser.id, users);

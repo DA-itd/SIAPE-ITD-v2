@@ -111,6 +111,7 @@ interface ModulesViewProps {
     professionalLicense: string;
   }) => void;
   onUpdateUserAccountStatus: (targetUserId: string, newStatus: AccountStatus) => void;
+  onDeleteUser: (targetUserId: string) => Promise<void>;
   onLogReportExport: (reportName: string, format: 'PDF' | 'CSV' | 'EXCEL', filterSummary: string) => void;
   onStudentSubmitSelfAssessment: (
     studentId: string,
@@ -151,6 +152,7 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
   onRegisterTutorAction,
   onCreateUserProfile,
   onUpdateUserAccountStatus,
+  onDeleteUser,
   onLogReportExport,
   onStudentSubmitSelfAssessment,
   onCreateConsultationAssessment,
@@ -229,6 +231,7 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
   const [usrSupervisorId, setUsrSupervisorId] = useState('');
   const [usrLicense, setUsrLicense] = useState('');
   const [usrError, setUsrError] = useState<string | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
   // Estados para Módulo de Reportes (Sección 14)
   const [repType, setRepType] = useState<number>(1);
@@ -2081,6 +2084,32 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
       setUsrLicense('');
     };
 
+    const handleDeleteUser = async (u: UserProfile) => {
+      setUsrError(null);
+      const assigned = cases.filter(
+        (c) => c.assignedPsychologistId === u.id || c.assignedInternId === u.id
+      ).length;
+      const extra = assigned > 0
+        ? ` Sus ${assigned} expediente(s) quedarán sin responsable y volverán a la bandeja de casos nuevos.`
+        : '';
+      const ok = window.confirm(
+        `¿Eliminar definitivamente la cuenta de ${u.fullName} (${u.email})?\n\n` +
+        `Se borrará su acceso con Google y ya no podrá entrar con esa cuenta.${extra}\n\n` +
+        'Esta acción no se puede deshacer.'
+      );
+      if (!ok) return;
+      setDeletingUserId(u.id);
+      try {
+        await onDeleteUser(u.id);
+      } catch (err: any) {
+        const message = err?.message || 'No se pudo eliminar la cuenta.';
+        setUsrError(message);
+        window.alert(message);
+      } finally {
+        setDeletingUserId(null);
+      }
+    };
+
     return (
       <div className="space-y-6">
         <div className="bg-white border border-slate-200 rounded-xl p-6">
@@ -2269,7 +2298,7 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
                       <div>
                         Expedientes asignados:{' '}
                         <span className="font-mono font-semibold">
-                          {u.assignedCaseIds.length}
+                          {cases.filter((c) => c.assignedPsychologistId === u.id || c.assignedInternId === u.id).length}
                         </span>
                       </div>
                     </td>
@@ -2302,6 +2331,15 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
                               Revocar
                             </button>
                           )}
+                          {currentUser.role === RoleCode.ADMINISTRADOR && u.role !== RoleCode.ESTUDIANTE && (
+                            <button
+                              onClick={() => handleDeleteUser(u)}
+                              disabled={deletingUserId === u.id}
+                              className="px-2.5 py-1 text-[11px] font-semibold text-white bg-rose-700 hover:bg-rose-800 disabled:opacity-50 rounded cursor-pointer"
+                            >
+                              {deletingUserId === u.id ? 'Eliminando…' : 'Eliminar'}
+                            </button>
+                          )}
                         </>
                       )}
                     </td>
@@ -2310,6 +2348,14 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
               </tbody>
             </table>
           </div>
+
+          {currentUser.role === RoleCode.ADMINISTRADOR && (
+            <p className="mt-2 text-[11px] text-slate-500">
+              <strong>Eliminar</strong> borra la cuenta de Google y el perfil del usuario; sus expedientes quedan
+              sin responsable y regresan a la bandeja de casos nuevos. No se pueden eliminar cuentas de alumnos
+              ni la propia cuenta.
+            </p>
+          )}
         </div>
 
         {/* Bitácora Institucional de Auditoría (audit_logs) */}

@@ -15,6 +15,7 @@ import {
   RefreshCw, // Icono para volver a contestar
 } from 'lucide-react';
 import {
+  AcademicProgram,
   AssessmentRecord,
   AssessmentStatus,
   ClinicalCaseRecord,
@@ -120,6 +121,7 @@ const COLUMBIA_ITEMS: { itemNumber: number; text: string }[] = [
 interface StudentPortalViewProps {
   currentUser: UserProfile;
   student: StudentRecord;
+  programs: AcademicProgram[];
   assessments: AssessmentRecord[];
   clinicalCase?: ClinicalCaseRecord;
   onUpdateStudentRecord: (updated: StudentRecord) => Promise<void>;
@@ -131,6 +133,7 @@ interface StudentPortalViewProps {
 export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   currentUser,
   student,
+  programs,
   assessments,
   clinicalCase,
   onUpdateStudentRecord,
@@ -138,6 +141,14 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   onSubmitColumbia,
   onLogoutOrSwitchRole,
 }) => {
+  // ¿La carrera actual ya está en el catálogo institucional?
+  const hasCatalogProgram = useMemo(
+    () =>
+      programs.some((p) => p.id === student.programId) ||
+      programs.some((p) => p.name.trim().toLowerCase() === (student.programName || '').trim().toLowerCase()),
+    [programs, student.programId, student.programName]
+  );
+
   const isDataLocked = useMemo(() => {
     return Boolean(
       student.fullName?.trim() &&
@@ -150,9 +161,10 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       student.currentAddress?.trim() &&
       student.age &&
       student.birthDate &&
-      student.gender
+      student.gender &&
+      hasCatalogProgram
     );
-  }, [student]);
+  }, [student, hasCatalogProgram]);
 
   const [activeTab, setActiveTab] = useState<'FICHA_DATOS' | 'BAI' | 'BDI' | 'COLUMBIA' | 'ESTADO'>(
     isDataLocked ? 'BAI' : 'FICHA_DATOS'
@@ -210,11 +222,39 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   const columbiaAnsweredCount = Object.keys(columbiaResponses).length;
   const columbiaHasYes = Object.values(columbiaResponses).some((v) => v === 1);
 
+  // Carrera seleccionada: por id del catálogo o, si el alumno ya tenía una carrera
+  // escrita a mano, se busca por nombre para conservarla mientras elige del menú.
+  const selectedProgramId =
+    programs.find((p) => p.id === formData.programId)?.id ||
+    programs.find((p) => p.name.trim().toLowerCase() === (formData.programName || '').trim().toLowerCase())?.id ||
+    '';
+  const legacyProgramName = !selectedProgramId && formData.programName && formData.programName.trim().toLowerCase() !== 'sin asignar'
+    ? formData.programName.trim()
+    : '';
+
+  const handleSelectProgram = (programId: string) => {
+    const program = programs.find((p) => p.id === programId);
+    if (!program) return;
+    setFormData((prev) => ({
+      ...prev,
+      programId: program.id,
+      programName: program.name,
+      academicDepartment: program.academicDepartment,
+    }));
+  };
+
   const handleSavePersonalData = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isDataLocked) return;
     try {
       setFormError(null);
+      const pickedProgram =
+        programs.find((p) => p.id === formData.programId) ||
+        programs.find((p) => p.name.trim().toLowerCase() === (formData.programName || '').trim().toLowerCase());
+      if (!pickedProgram) {
+        setFormError('Selecciona tu carrera del menú. Es necesaria para tu expediente.');
+        return;
+      }
       if (!isValidBirthDate(formData.birthDate || '')) {
         setFormError('Revisa tu fecha de nacimiento: debe ser una fecha válida (día, mes y año).');
         return;
@@ -233,6 +273,9 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
       }
       await onUpdateStudentRecord({
         ...formData,
+        programId: pickedProgram.id,
+        programName: pickedProgram.name,
+        academicDepartment: pickedProgram.academicDepartment,
         age: calcAge(formData.birthDate as string),
         emergencyContact: composeEmergencyContact(emergencyName, emergencyPhone),
       });
@@ -408,8 +451,30 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div>
-                <label className="block font-semibold text-[#3B4A3F] mb-1">Carrera ITD</label>
-                <input type="text" value={formData.programName} onChange={(e) => setFormData({ ...formData, programName: e.target.value })} className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]" />
+                <label className="block font-semibold text-[#3B4A3F] mb-1">Carrera ITD *</label>
+                <select
+                  required
+                  value={selectedProgramId || (legacyProgramName ? '__legacy__' : '')}
+                  onChange={(e) => handleSelectProgram(e.target.value)}
+                  className="w-full px-3 py-2 border border-[#E8E2D5] rounded-lg bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
+                >
+                  <option value="" disabled>Selecciona tu carrera…</option>
+                  {legacyProgramName && (
+                    <option value="__legacy__">
+                      Carrera actual: {legacyProgramName} — elígela de la lista
+                    </option>
+                  )}
+                  {programs.map((program) => (
+                    <option key={program.id} value={program.id}>
+                      {program.name}
+                    </option>
+                  ))}
+                </select>
+                {selectedProgramId && (
+                  <p className="mt-1 text-[11px] text-[#4A6B53]">
+                    {programs.find((p) => p.id === selectedProgramId)?.academicDepartment}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block font-semibold text-[#3B4A3F] mb-1">Semestre Actual</label>
