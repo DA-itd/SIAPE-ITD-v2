@@ -287,6 +287,16 @@ export interface CaseAssignmentHistoryEntry {
   revokedAt: string | null;
 }
 
+export interface StudentConsultationStatus {
+  requested: boolean;
+  requestedAt: string | null;
+  note: string | null;
+  priority: PriorityLevel;
+  suggestedPriority: PriorityLevel;
+  columbiaSiCount?: number | null;
+  assigned: boolean;
+}
+
 // 11. clinical_cases (EXPEDIENTE PSICOLÓGICO ÚNICO POR ESTUDIANTE)
 export interface ClinicalCaseRecord {
   id: string; // Identificador interno del expediente único (ej. EXP-ITD-2026-001)
@@ -295,6 +305,9 @@ export interface ClinicalCaseRecord {
   updatedAt: string;
   modalityOrigin: AttentionModality;
   assignmentHistory?: CaseAssignmentHistoryEntry[];
+  consultationRequested?: boolean;
+  consultationRequestedAt?: string | null;
+  consultationRequestNote?: string | null;
   // Indicadores independientes vinculados a cada instrumento y su versión
   anxietyIndicator: {
     lastAssessmentId: string | null;

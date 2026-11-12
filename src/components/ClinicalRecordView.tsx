@@ -7,6 +7,7 @@ import {
   ClipboardPlus,
   FileText,
   History,
+  HeartHandshake,
   Lock,
   Plus,
   Printer,
@@ -561,6 +562,55 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
       </div>
 
       {/* PANEL DE APOYO AL JUICIO CLÍNICO ESTILO BLUEPRINT (EVOLUCIÓN, SÍNTOMAS TOP, BIENESTAR Y GUÍA PARA PSICÓLOGOS/PRACTICANTES) */}
+      {clinicalCase.consultationRequested && (
+        <div className="bg-gradient-to-r from-rose-50 via-white to-amber-50 border-2 border-rose-300 rounded-xl p-5 shadow-sm no-print">
+          <div className="flex items-start gap-3.5">
+            <div className="p-2.5 rounded-xl bg-rose-600 text-white shrink-0 shadow-sm">
+              <HeartHandshake className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-rose-800">SOLICITUD DE CONSULTA DEL ALUMNO</div>
+              <h2 className="text-lg font-bold text-slate-900 mt-0.5">
+                El alumno pidió hablar con Psicología
+              </h2>
+              <p className="text-xs text-slate-700 mt-1 leading-relaxed">
+                Solicitó una consulta el{' '}
+                {clinicalCase.consultationRequestedAt
+                  ? new Date(clinicalCase.consultationRequestedAt).toLocaleDateString('es-MX', {
+                      day: '2-digit',
+                      month: 'long',
+                      year: 'numeric',
+                    })
+                  : 'una fecha no registrada'}
+                .{' '}
+                {clinicalCase.assignedPsychologistName
+                  ? `Responsable actual: ${clinicalCase.assignedPsychologistName}.`
+                  : 'Aún no tiene psicólogo responsable asignado.'}
+              </p>
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                  clinicalCase.operationalPriority === PriorityLevel.ROJO
+                    ? 'bg-rose-100 text-rose-800'
+                    : clinicalCase.operationalPriority === PriorityLevel.AMARILLO
+                      ? 'bg-amber-100 text-amber-900'
+                      : 'bg-emerald-100 text-emerald-800'
+                }`}>
+                  Semáforo operativo: {clinicalCase.operationalPriority}
+                </span>
+                <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-semibold">
+                  Sugerido por cuestionarios: {clinicalCase.psychometricSuggestedPriority}
+                </span>
+              </div>
+              {clinicalCase.consultationRequestNote && (
+                <blockquote className="mt-3 p-3 rounded-lg bg-white/80 border border-rose-200 text-xs text-slate-800 leading-relaxed whitespace-pre-wrap break-words">
+                  “{clinicalCase.consultationRequestNote}”
+                </blockquote>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <ClinicalDecisionSupportBlueprint
         currentUser={currentUser}
         clinicalCase={clinicalCase}

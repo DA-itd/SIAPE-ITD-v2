@@ -12,7 +12,7 @@ import {
   AcademicProgram, AcademicSupportAlert, AccountStatus, AssessmentRecord, AssessmentStatus,
   AttentionModality, AuditLogEntry, CaseAssignmentHistoryEntry, CaseFollowUpState, ClinicalCaseRecord,
   EvaluationPeriod, FollowUpTask, InstrumentCode, PriorityLevel,
-  PsychologySession, RoleCode, StudentRecord, UserProfile,
+  PsychologySession, RoleCode, StudentConsultationStatus, StudentRecord, UserProfile,
 } from './types/siape';
 import { ITD_ACADEMIC_PROGRAMS } from './data/academicPrograms';
 import { INITIAL_INSTRUMENT_CONFIGS, evaluateInstrumentDeterministically } from './lib/scoringEngine';
@@ -26,7 +26,7 @@ import { AuthProvider, PROFILE_SELECT, mapProfileRow, useAuth } from './context/
 import { filterCasesForUser, filterStudentsForUser } from './lib/permissionsEngine';
 
 type PrimaryView = 'ARQUITECTURA_ENTREGA_1' | 'PANEL_PRINCIPAL' | 'EXPEDIENTE_UNICO' | 'ESTUDIANTES' | 'EVALUACIONES' | 'SEGUIMIENTO' | 'USUARIOS' | 'REPORTES';
-const APP_VERSION = '2026.11.12-4';
+const APP_VERSION = '2026.11.12-5';
 const EVALUATION_PERIODS: EvaluationPeriod[] = [];
 
 function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: () => void }) {
@@ -35,6 +35,7 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
   const [programs, setPrograms] = useState<AcademicProgram[]>(ITD_ACADEMIC_PROGRAMS);
   const [cases, setCases] = useState<ClinicalCaseRecord[]>([]);
   const [assessments, setAssessments] = useState<AssessmentRecord[]>([]);
+  const [consultationStatus, setConsultationStatus] = useState<StudentConsultationStatus | null>(null);
   const [sessions, setSessions] = useState<PsychologySession[]>([]);
   const [tasks, setTasks] = useState<FollowUpTask[]>([]);
   const [tutorAlerts, setTutorAlerts] = useState<AcademicSupportAlert[]>([]);
@@ -120,6 +121,9 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
           nextFollowUpAction: c.next_follow_up_action ?? '', nextFollowUpDate: c.next_follow_up_date ?? null,
           generalClinicalSummary: c.general_clinical_summary ?? '', referrals: [], priorityHistory: [],
           assignmentHistory: historyByCase.get(c.id) ?? [],
+          consultationRequested: !!c.consultation_requested,
+          consultationRequestedAt: c.consultation_requested_at ?? null,
+          consultationRequestNote: c.consultation_request_note ?? null,
         } as ClinicalCaseRecord;
       });
 
@@ -152,16 +156,25 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
           .filter((a) => a.studentId === studentId && (a.instrumentCode as unknown as string) === code && a.totalScore !== null)
           .sort((a, b) => b.appliedAt.localeCompare(a.appliedAt))[0];
         mappedCases.forEach((c) => {
-          if (c.anxietyIndicator.score === null) {
-            const bai = lastScore(c.studentId, 'BAI');
-            if (bai) c.anxietyIndicator = { lastAssessmentId: bai.id, instrumentVersion: bai.versionTag, score: bai.totalScore, category: bai.psychometricCategory, evaluatedAt: bai.appliedAt.slice(0, 10) };
+          const bai = lastScore(c.studentId, 'BAI');
+          const bdi = lastScore(c.studentId, 'BDI');
+          if (c.anxietyIndicator.score === null && bai) {
+            c.anxietyIndicator = { lastAssessmentId: bai.id, instrumentVersion: bai.versionTag, score: bai.totalScore, category: bai.psychometricCategory, evaluatedAt: bai.appliedAt.slice(0, 10) };
           }
-          if (c.depressionIndicator.score === null) {
-            const bdi = lastScore(c.studentId, 'BDI');
-            if (bdi) c.depressionIndicator = { lastAssessmentId: bdi.id, instrumentVersion: bdi.versionTag, score: bdi.totalScore, category: bdi.psychometricCategory, evaluatedAt: bdi.appliedAt.slice(0, 10) };
+          if (c.depressionIndicator.score === null && bdi) {
+            c.depressionIndicator = { lastAssessmentId: bdi.id, instrumentVersion: bdi.versionTag, score: bdi.totalScore, category: bdi.psychometricCategory, evaluatedAt: bdi.appliedAt.slice(0, 10) };
           }
           if (!c.lastEvaluationDate) {
             c.lastEvaluationDate = c.anxietyIndicator.evaluatedAt ?? c.depressionIndicator.evaluatedAt ?? null;
+          }
+          // Red de seguridad: si el expediente no refleja la prioridad sugerida por
+          // los cuestionarios, se toma la más alta de las últimas aplicaciones.
+          const rank: Record<string, number> = { VERDE: 1, AMARILLO: 2, ROJO: 3 };
+          const candidates = [bai?.suggestedPriority, bdi?.suggestedPriority]
+            .filter((p): p is PriorityLevel => Boolean(p));
+          const highest = candidates.sort((a, b) => (rank[b] ?? 0) - (rank[a] ?? 0))[0];
+          if (highest && (rank[highest] ?? 0) > (rank[c.psychometricSuggestedPriority as string] ?? 0)) {
+            c.psychometricSuggestedPriority = highest;
           }
         });
         setAssessments(mappedAssessments);
@@ -224,6 +237,29 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
   }, [authUser]);
 
   useEffect(() => { loadMyAssessments(); }, [loadMyAssessments]);
+
+  // Estado de la solicitud de consulta del alumno (si ya la envió, prioridad, etc.)
+  const loadMyConsultation = React.useCallback(async () => {
+    if (!supabase || authUser.role !== RoleCode.ESTUDIANTE) return;
+    const { data, error } = await supabase.rpc('my_consultation_status');
+    if (error) {
+      console.warn('No se pudo cargar el estado de la solicitud de consulta', error);
+      return;
+    }
+    setConsultationStatus((data as StudentConsultationStatus) ?? null);
+  }, [authUser]);
+
+  useEffect(() => { loadMyConsultation(); }, [loadMyConsultation]);
+
+  const handleRequestConsultation = async (note?: string): Promise<void> => {
+    if (!supabase) throw new Error('Supabase no está configurado.');
+    const { data, error } = await supabase.rpc('request_my_consultation', {
+      p_note: note?.trim() ? note.trim() : null,
+    });
+    if (error) throw new Error(error.message || 'No se pudo enviar la solicitud.');
+    setConsultationStatus((data as StudentConsultationStatus) ?? null);
+    await loadMyConsultation();
+  };
 
   // Guarda la ficha del alumno. Lanza un error si algo falla, para que el portal lo muestre.
   const persistStudentRecord = async (s: StudentRecord): Promise<void> => {
@@ -546,6 +582,11 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
             currentUser={currentUser} student={targetStudent} clinicalCase={targetCase ?? undefined}
             programs={programs}
             assessments={assessments.filter((a) => a.studentId === targetStudent.id)}
+            consultationStatus={consultationStatus}
+            onRequestConsultation={async (note) => {
+              if (viewAsStudentMode) throw new Error('Vista previa: no se envía la solicitud.');
+              await handleRequestConsultation(note);
+            }}
             onUpdateStudentRecord={async (updated) => {
               if (viewAsStudentMode) throw new Error('Vista previa: no se guardan cambios.');
               await persistStudentRecord(updated);
@@ -560,6 +601,7 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
               });
               if (error) throw new Error(error.message || 'No se pudo guardar el cuestionario.');
               await loadMyAssessments();
+              await loadMyConsultation();
             }}
             onSubmitColumbia={async (responses) => {
               if (!supabase) throw new Error('Supabase no está configurado.');
@@ -567,6 +609,7 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
               const { error } = await supabase.rpc('submit_my_columbia', { p_responses: responses });
               if (error) throw new Error(error.message || 'No se pudo guardar el cuestionario.');
               await loadMyAssessments();
+              await loadMyConsultation();
             }}
             onLogoutOrSwitchRole={onSignOut}
           />
