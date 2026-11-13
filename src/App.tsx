@@ -26,7 +26,7 @@ import { AuthProvider, PROFILE_SELECT, mapProfileRow, useAuth } from './context/
 import { filterCasesForUser, filterStudentsForUser } from './lib/permissionsEngine';
 
 type PrimaryView = 'ARQUITECTURA_ENTREGA_1' | 'PANEL_PRINCIPAL' | 'EXPEDIENTE_UNICO' | 'ESTUDIANTES' | 'EVALUACIONES' | 'SEGUIMIENTO' | 'USUARIOS' | 'REPORTES';
-const APP_VERSION = '2026.11.12-5';
+const APP_VERSION = '2026.11.12-6';
 const EVALUATION_PERIODS: EvaluationPeriod[] = [];
 
 function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: () => void }) {
@@ -109,7 +109,7 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
         const psy = active.find((x: any) => x.assignment_role === 'PSICOLOGO_RESPONSABLE');
         const intern = active.find((x: any) => x.assignment_role === 'PRACTICANTE_SUPERVISADO');
         return {
-          id: c.id, studentId: c.student_id, openedAt: c.opened_at, updatedAt: c.updated_at, modalityOrigin: c.modality_origin,
+          id: c.id, caseFolio: c.case_folio ?? c.id, studentId: c.student_id, openedAt: c.opened_at, updatedAt: c.updated_at, modalityOrigin: c.modality_origin,
           anxietyIndicator: indicator(c.anxiety_score, c.anxiety_version, c.anxiety_category, c.anxiety_evaluated_at),
           depressionIndicator: indicator(c.depression_score, c.depression_version, c.depression_category, c.depression_evaluated_at),
           psychometricSuggestedPriority: c.psychometric_suggested_priority, operationalPriority: c.operational_priority,
@@ -529,7 +529,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     { id: 'PANEL_PRINCIPAL', label: 'Panel Principal y Semáforo', icon: LayoutDashboard },
     { id: 'EXPEDIENTE_UNICO', label: 'Expediente Psicológico Único', icon: FolderKanban },
     { id: 'ESTUDIANTES', label: 'Padrón de Estudiantes', icon: GraduationCap },
-    { id: 'EVALUACIONES', label: 'Evaluaciones (BAI y BDI)', icon: ClipboardCheck },
     { id: 'SEGUIMIENTO', label: 'Módulo de Seguimiento', icon: Activity },
     { id: 'USUARIOS', label: 'Usuarios y Accesos', icon: UserCog },
     { id: 'REPORTES', label: 'Reportes e Impresión', icon: FileBarChart2 },

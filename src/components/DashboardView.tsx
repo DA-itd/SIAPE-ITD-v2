@@ -130,16 +130,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       .sort((a, b) => (b.clinicalCase.openedAt || '').localeCompare(a.clinicalCase.openedAt || ''));
   }, [authorizedCases, students]);
 
-  // Solicitudes de consulta que aún no tienen psicólogo: cualquier profesional
-  // puede tomarlas. El semáforo más alto entre operativo y cuestionarios manda.
-  const requestedUnassignedCases = useMemo(() => {
+  // Solicitudes de consulta visibles para el usuario: primero las que ya tomó
+  // (para darles seguimiento) y después las que siguen sin responsable.
+  const requestedVisibleCases = useMemo(() => {
     return authorizedCases
-      .filter((c) => c.consultationRequested && isUnassignedCase(c))
+      .filter((c) => c.consultationRequested)
       .map((clinicalCase) => {
         const student = students.find((s) => s.id === clinicalCase.studentId);
+        const unassigned = isUnassignedCase(clinicalCase);
+        const assignedToMe =
+          clinicalCase.assignedPsychologistId === currentUser.id ||
+          clinicalCase.assignedInternId === currentUser.id;
         return {
           clinicalCase,
           student,
+          unassigned,
+          assignedToMe,
           priority: highestPriority(
             clinicalCase.operationalPriority,
             clinicalCase.psychometricSuggestedPriority,
@@ -148,17 +154,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         };
       })
       .filter(
-        (row): row is { clinicalCase: ClinicalCaseRecord; student: StudentRecord; priority: PriorityLevel } =>
-          Boolean(row.student)
+        (row): row is {
+          clinicalCase: ClinicalCaseRecord;
+          student: StudentRecord;
+          unassigned: boolean;
+          assignedToMe: boolean;
+          priority: PriorityLevel;
+        } => Boolean(row.student)
       )
       .sort(
         (a, b) =>
+          Number(b.assignedToMe) - Number(a.assignedToMe) ||
+          Number(a.unassigned) - Number(b.unassigned) ||
           PRIORITY_RANK[b.priority] - PRIORITY_RANK[a.priority] ||
           (b.clinicalCase.consultationRequestedAt || '').localeCompare(
             a.clinicalCase.consultationRequestedAt || ''
           )
       );
-  }, [authorizedCases, students]);
+  }, [authorizedCases, students, currentUser.id]);
 
   const unassignedCasesWithoutRequest = unassignedCasesWithStudent.filter(
     (row) => !row.clinicalCase.consultationRequested
@@ -236,7 +249,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           const matchMatricula = student.matricula.toLowerCase().includes(q);
           const matchName = student.fullName.toLowerCase().includes(q);
           const matchEmail = student.institutionalEmail.toLowerCase().includes(q);
-          const matchFolio = clinicalCase.id.toLowerCase().includes(q);
+          const matchFolio = `${clinicalCase.caseFolio ?? clinicalCase.id} ${clinicalCase.id}`.toLowerCase().includes(q);
           if (!matchMatricula && !matchName && !matchEmail && !matchFolio) return false;
         }
         return true;
@@ -279,7 +292,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   return (
     <div className="space-y-6">
       {/* SOLICITUDES DE CONSULTA DEL ALUMNADO (PENDIENTES DE TOMAR) */}
-      {canViewNominalClinicalCases && requestedUnassignedCases.length > 0 && (
+      {canViewNominalClinicalCases && requestedVisibleCases.length > 0 && (
         <div className="bg-gradient-to-br from-rose-50 via-white to-amber-50 border-2 border-rose-300 rounded-2xl p-5 shadow-sm">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
             <div className="flex items-start gap-3.5">
@@ -289,21 +302,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div>
                 <div className="text-xs font-bold text-rose-800">Solicitudes de consulta</div>
                 <h2 className="text-base font-bold text-[#2F3E32] mt-0.5">
-                  {requestedUnassignedCases.length} alumno(s) pidieron hablar con Psicología
+                  {requestedVisibleCases.length} solicitud(es) de consulta
                 </h2>
                 <p className="text-xs text-[#4A6B53] mt-1 leading-relaxed">
-                  Ellos solicitaron una consulta desde su portal. Cualquier psicólogo puede tomar el caso y
-                  comunicarse con el alumno. El color muestra el semáforo más alto entre la prioridad operativa
-                  y la sugerida por los cuestionarios.
+                  Las solicitudes que ya tomaste permanecen aquí, arriba de los demás registros, para que les des
+                  seguimiento. Las que no tienen responsable puede tomarlas cualquier psicólogo. El color muestra
+                  el semáforo más alto entre la prioridad operativa y la sugerida por los cuestionarios.
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <span className="px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-[11px] font-bold text-emerald-800">
+                A tu cargo: {requestedVisibleCases.filter((r) => r.assignedToMe).length}
+              </span>
               <span className="px-2.5 py-1 rounded-full bg-white border border-rose-200 text-[11px] font-bold text-rose-800">
-                {requestedUnassignedCases.filter((r) => r.priority === PriorityLevel.ROJO).length} en ROJO
+                Sin responsable: {requestedVisibleCases.filter((r) => r.unassigned).length}
+              </span>
+              <span className="px-2.5 py-1 rounded-full bg-white border border-rose-200 text-[11px] font-bold text-rose-800">
+                {requestedVisibleCases.filter((r) => r.priority === PriorityLevel.ROJO).length} en ROJO
               </span>
               <span className="px-2.5 py-1 rounded-full bg-white border border-amber-200 text-[11px] font-bold text-amber-800">
-                {requestedUnassignedCases.filter((r) => r.priority === PriorityLevel.AMARILLO).length} en AMARILLO
+                {requestedVisibleCases.filter((r) => r.priority === PriorityLevel.AMARILLO).length} en AMARILLO
               </span>
             </div>
           </div>
@@ -315,7 +334,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           )}
 
           <div className="mt-4 space-y-3">
-            {requestedUnassignedCases.slice(0, 6).map(({ clinicalCase, student, priority }) => (
+            {requestedVisibleCases.slice(0, 6).map(({ clinicalCase, student, priority, unassigned, assignedToMe }) => (
               <div key={clinicalCase.id} className="bg-white border border-rose-200 rounded-xl p-4">
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
                   <div className="min-w-0">
@@ -336,6 +355,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           VERDE · Orientación
                         </span>
                       )}
+                      {assignedToMe ? (
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[11px] font-bold">
+                          A TU CARGO
+                        </span>
+                      ) : unassigned ? (
+                        <span className="px-2 py-0.5 rounded-md border border-rose-300 text-rose-800 text-[11px] font-bold">
+                          SIN RESPONSABLE
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-bold">
+                          ASIGNADO A {clinicalCase.assignedPsychologistName || clinicalCase.assignedInternName || 'OTRO PROFESIONAL'}
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-[#4A6B53] mt-0.5">
                       Mat. <span className="font-mono">{student.matricula}</span> · {student.programName}
@@ -351,7 +383,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           })
                         : 'una fecha no registrada'}
                       {' · '}expediente{' '}
-                      <span className="font-mono">{clinicalCase.id.slice(0, 8).toUpperCase()}</span>
+                      <span className="font-mono">{clinicalCase.caseFolio ?? clinicalCase.id}</span>
                     </div>
                     {clinicalCase.consultationRequestNote && (
                       <p className="mt-2 text-xs text-rose-950 bg-rose-50 border border-rose-100 rounded-lg p-2.5 leading-relaxed whitespace-pre-wrap break-words">
@@ -360,7 +392,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {onClaimCase && (
+                    {unassigned && onClaimCase && (
                       <button
                         onClick={() => handleClaim(clinicalCase.id)}
                         disabled={claimingCaseId === clinicalCase.id}
@@ -373,14 +405,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       onClick={() => onOpenClinicalCase(clinicalCase.id)}
                       className="px-3.5 py-2 text-xs font-bold text-[#4A6B53] bg-[#F4F0E6] hover:bg-[#E8E2D5] rounded-lg cursor-pointer whitespace-nowrap transition-colors"
                     >
-                      Ver expediente
+                      {assignedToMe ? 'Dar seguimiento' : 'Ver expediente'}
                     </button>
                   </div>
                 </div>
               </div>
             ))}
           </div>
-          {requestedUnassignedCases.length > 6 && (
+          {requestedVisibleCases.length > 6 && (
             <div className="mt-2 text-[11px] text-[#4A6B53]">
               Se muestran las 6 solicitudes más prioritarias. Las demás están en la tabla de expedientes.
             </div>
@@ -414,10 +446,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button
-                  onClick={() => onNavigateModule('EVALUACIONES')}
+                  onClick={() => onNavigateModule('ESTUDIANTES')}
                   className="px-3.5 py-2 text-xs font-bold text-white bg-[#4A6B53] hover:bg-[#3B5743] rounded-xl transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
                 >
-                  Aplicar Evaluaciones (BAI / BDI)
+                  Ver expedientes de alumnos
                 </button>
                 <button
                   onClick={() => onNavigateModule('SEGUIMIENTO')}
@@ -496,7 +528,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     {student.semester ? ` · ${student.semester}° Sem` : ''}
                   </div>
                   <div className="text-[11px] text-[#4A6B53] mt-0.5">
-                    Expediente <span className="font-mono">{clinicalCase.id.slice(0, 8).toUpperCase()}</span> · Alta:{' '}
+                    Expediente <span className="font-mono">{clinicalCase.caseFolio ?? clinicalCase.id}</span> · Alta:{' '}
                     {clinicalCase.openedAt ? new Date(clinicalCase.openedAt).toLocaleDateString() : 'sin fecha'} · BAI:{' '}
                     {clinicalCase.anxietyIndicator.score ?? '—'} · BDI: {clinicalCase.depressionIndicator.score ?? '—'}
                   </div>
@@ -991,7 +1023,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     paginatedRows.map(({ clinicalCase, student }) => (
                       <tr key={clinicalCase.id} className="hover:bg-[#FDFBF7] transition-colors">
                         <td className="py-3 px-3 font-mono tabular-nums whitespace-nowrap">
-                          <div className="font-bold text-[#2F3E32]">{clinicalCase.id.toUpperCase()}</div>
+                          <div className="font-bold text-[#2F3E32]">{clinicalCase.caseFolio ?? clinicalCase.id}</div>
                           <div className="text-[#4A6B53]">Mat. {student.matricula}</div>
                         </td>
                         <td className="py-3 px-3">

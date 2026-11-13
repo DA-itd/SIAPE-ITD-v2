@@ -14,6 +14,9 @@
      solicitud de consulta que hace el alumno desde su portal. Si el semáforo de
      los cuestionarios o el tamizaje Columbia salen altos, la solicitud sube de
      prioridad y aparece en el Panel Principal para que cualquier psicólogo la tome.
+   - `supabase/20261112_folio_expediente.sql`: genera el folio visible del expediente
+     con el formato `SIAPE-ITD-X-YYYY-ZZZ` (X = A enero-junio, B julio-diciembre;
+     ZZZ = consecutivo anual desde 001) y renumera los expedientes existentes.
    Al final del primer script se imprime un conteo de alumnos/expedientes para verificar.
 2. Recompila y vuelve a desplegar la app (`npm run build` o el deploy de Vercel).
 3. El alumno ya elige su carrera desde un menú en “Mis Datos”; el psicólogo ve una bandeja

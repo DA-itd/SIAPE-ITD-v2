@@ -588,7 +588,7 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
                             onClick={() => onOpenClinicalCase(linkedCase.id)}
                             className="px-2.5 py-1 text-xs font-semibold text-[#1E3A8A] bg-blue-50 hover:bg-blue-100 rounded-md cursor-pointer font-mono"
                           >
-                            {linkedCase.id.toUpperCase()}
+                            {linkedCase.caseFolio ?? linkedCase.id}
                           </button>
                         )}
                       </td>
@@ -959,7 +959,7 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
                 {!isNeutralStudentScreen ? (
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">
-                      Motivo de Aplicación ({effectiveCase.id.toUpperCase()})
+                      Motivo de Aplicación ({effectiveCase.caseFolio ?? effectiveCase.id})
                     </label>
                     <input
                       type="text"
@@ -1416,7 +1416,7 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
                     Alumno: <strong>{effectiveStudent.fullName}</strong> (Mat.{' '}
                     <span className="font-mono">{effectiveStudent.matricula}</span>) · Expediente:{' '}
                     <span className="font-mono font-bold text-[#7C1D36]">
-                      {effectiveCase.id.toUpperCase()}
+                      {effectiveCase.caseFolio ?? effectiveCase.id}
                     </span>
                   </div>
                   <button
@@ -1806,7 +1806,7 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-mono font-bold text-[#7C1D36]">
-                        {c.id.toUpperCase()}
+                        {c.caseFolio ?? c.id}
                       </span>
                       <span>·</span>
                       <span className="font-bold text-slate-900">{stu.fullName}</span>

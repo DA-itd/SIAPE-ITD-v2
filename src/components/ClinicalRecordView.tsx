@@ -38,6 +38,16 @@ import {
 } from '../lib/scoringEngine';
 import ClinicalDecisionSupportBlueprint from './ClinicalDecisionSupportBlueprint';
 
+const FOLLOW_UP_LABELS: Record<string, string> = {
+  PENDIENTE_CONTACTO: 'Pendiente de contacto',
+  SIN_ASIGNAR: 'Sin asignar',
+  CITA_PROGRAMADA: 'Cita programada',
+  EN_ATENCION: 'En atención',
+  REQUIERE_NUEVA_VALORACION: 'Requiere nueva valoración',
+  CANALIZADO: 'Canalizado',
+  SEGUIMIENTO_CONCLUIDO: 'Seguimiento concluido',
+};
+
 interface ClinicalRecordViewProps {
   currentUser: UserProfile;
   clinicalCase: ClinicalCaseRecord;
@@ -388,7 +398,7 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
             <div>
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                 <span className="font-mono font-bold text-[#7C1D36]">
-                  EXPEDIENTE ÚNICO: {clinicalCase.id.toUpperCase()}
+                  EXPEDIENTE ÚNICO: {clinicalCase.caseFolio ?? clinicalCase.id}
                 </span>
                 <span>·</span>
                 <span className="font-mono">Matrícula: {student.matricula}</span>
@@ -628,7 +638,7 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
         {/* Sección A: Datos de Identificación e Información Académica */}
         <div className="bg-white border border-slate-200 rounded-xl p-6">
           <h2 className="text-sm font-bold text-slate-900 border-b border-slate-200 pb-2.5">
-            A. Datos de Identificación Académica
+            Datos de identificación académica
           </h2>
           <dl className="mt-3 space-y-2 text-xs">
             <div className="flex justify-between">
@@ -666,12 +676,17 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
 
         {/* Sección C y E: Interpretación Profesional y Observaciones Clínicas (Protegido por RLS) */}
         <div className="bg-white border border-slate-200 rounded-xl p-6 lg:col-span-2">
-          <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
-            <h2 className="text-sm font-bold text-slate-900">
-              C, E & I. Síntesis Clínica, Observaciones Profesionales y Estado del Seguimiento
-            </h2>
-            <span className="text-[11px] font-mono text-slate-500">
-              Estado: {clinicalCase.followUpState}
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 border-b border-slate-200 pb-2.5">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">
+                Síntesis clínica, observaciones y estado del seguimiento
+              </h2>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Resumen del expediente, observaciones del profesional y situación actual del caso.
+              </p>
+            </div>
+            <span className="text-[11px] font-mono text-slate-500 shrink-0">
+              Estado: {FOLLOW_UP_LABELS[clinicalCase.followUpState] ?? clinicalCase.followUpState}
             </span>
           </div>
 
@@ -679,9 +694,13 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
             <div className="mt-3 space-y-3 text-xs text-slate-700">
               <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg leading-relaxed">
                 <div className="font-bold text-slate-900 mb-1">
-                  Síntesis y Observaciones Profesionales del Expediente:
+                  Síntesis y observaciones profesionales del expediente:
                 </div>
-                {clinicalCase.generalClinicalSummary}
+                {clinicalCase.generalClinicalSummary?.trim() || (
+                  <span className="text-slate-500">
+                    Sin síntesis registrada todavía. Se puede documentar al registrar una sesión de atención.
+                  </span>
+                )}
               </div>
 
               {clinicalCase.priorityOverrideReason && (
@@ -797,7 +816,7 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
                 CUESTIONARIO ITD 2025
               </span>
               <h2 className="text-sm font-bold text-slate-900">
-                D. Contexto Integral Psicopedagógico y Factores de Riesgo / Protectores
+                Contexto integral psicopedagógico y factores de riesgo / protectores
               </h2>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -1310,7 +1329,7 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <div>
                 <div className="text-xs font-semibold text-[#7C1D36]">
-                  Aplicación durante la consulta · Expediente Único {clinicalCase.id.toUpperCase()}
+                  Aplicación durante la consulta · Expediente Único {clinicalCase.caseFolio ?? clinicalCase.id}
                 </div>
                 <h3 className="text-lg font-bold text-slate-900">
                   Nueva Evaluación Psicológica ({student.fullName})

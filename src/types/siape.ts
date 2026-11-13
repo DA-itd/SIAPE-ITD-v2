@@ -299,7 +299,8 @@ export interface StudentConsultationStatus {
 
 // 11. clinical_cases (EXPEDIENTE PSICOLÓGICO ÚNICO POR ESTUDIANTE)
 export interface ClinicalCaseRecord {
-  id: string; // Identificador interno del expediente único (ej. EXP-ITD-2026-001)
+  id: string; // Identificador interno del expediente único (UUID)
+  caseFolio?: string; // Folio visible: SIAPE-ITD-A-2026-001
   studentId: string; // Relación 1:1 con students.id (Expediente Único)
   openedAt: string;
   updatedAt: string;
