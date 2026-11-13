@@ -112,6 +112,7 @@ interface ModulesViewProps {
   }) => void;
   onUpdateUserAccountStatus: (targetUserId: string, newStatus: AccountStatus) => void;
   onDeleteUser: (targetUserId: string) => Promise<void>;
+  onHardDeleteUser: (targetUserId: string) => Promise<void>;
   onLogReportExport: (reportName: string, format: 'PDF' | 'CSV' | 'EXCEL', filterSummary: string) => void;
   onStudentSubmitSelfAssessment: (
     studentId: string,
@@ -153,6 +154,7 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
   onCreateUserProfile,
   onUpdateUserAccountStatus,
   onDeleteUser,
+  onHardDeleteUser,
   onLogReportExport,
   onStudentSubmitSelfAssessment,
   onCreateConsultationAssessment,
@@ -232,6 +234,7 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
   const [usrLicense, setUsrLicense] = useState('');
   const [usrError, setUsrError] = useState<string | null>(null);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [hardDeletingUserId, setHardDeletingUserId] = useState<string | null>(null);
 
   // Estados para Módulo de Reportes (Sección 14)
   const [repType, setRepType] = useState<number>(1);
@@ -2108,6 +2111,32 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
       }
     };
 
+    const handleHardDeleteUser = async (u: UserProfile) => {
+      setUsrError(null);
+      const assigned = cases.filter(
+        (c) => c.assignedPsychologistId === u.id || c.assignedInternId === u.id
+      ).length;
+      const extra = assigned > 0 ? ` Sus ${assigned} expediente(s) quedarán sin responsable.` : '';
+      const typed = window.prompt(
+        `BORRADO DEFINITIVO DE CUENTA DE PRUEBA\n\n` +
+        `${u.fullName} (${u.email})${extra}\n\n` +
+        'Se borrará la cuenta de Google, el perfil, sus roles, asignaciones y su nombre de los registros clínicos. ' +
+        'NO quedará el perfil como REVOCADA ni el historial de este usuario.\n\n' +
+        'Escribe BORRAR para confirmar:'
+      );
+      if (typed !== 'BORRAR') return;
+      setHardDeletingUserId(u.id);
+      try {
+        await onHardDeleteUser(u.id);
+      } catch (err: any) {
+        const message = err?.message || 'No se pudo borrar definitivamente la cuenta.';
+        setUsrError(message);
+        window.alert(message);
+      } finally {
+        setHardDeletingUserId(null);
+      }
+    };
+
     return (
       <div className="space-y-6">
         <div className="bg-white border border-slate-200 rounded-xl p-6">
@@ -2315,9 +2344,22 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
                           Sesión actual (Protección anti-autoedición)
                         </span>
                       ) : (!u.hasAuthAccount && u.status === AccountStatus.REVOCADA) ? (
-                        <span className="text-[11px] text-slate-400">
-                          Historial conservado · sin acceso
-                        </span>
+                        <>
+                          <span className="text-[11px] text-slate-400">
+                            Historial conservado · sin acceso
+                          </span>
+                          {currentUser.role === RoleCode.ADMINISTRADOR &&
+                            u.role !== RoleCode.ESTUDIANTE &&
+                            u.role !== RoleCode.ADMINISTRADOR && (
+                              <button
+                                onClick={() => handleHardDeleteUser(u)}
+                                disabled={hardDeletingUserId === u.id}
+                                className="px-2.5 py-1 text-[11px] font-semibold text-white bg-red-900 hover:bg-red-950 disabled:opacity-50 rounded cursor-pointer"
+                              >
+                                {hardDeletingUserId === u.id ? 'Borrando…' : 'Borrar prueba'}
+                              </button>
+                            )}
+                        </>
                       ) : (
                         <>
                           {u.status !== AccountStatus.ACTIVA && (
@@ -2347,6 +2389,17 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
                               {deletingUserId === u.id ? 'Eliminando…' : 'Eliminar'}
                             </button>
                           )}
+                          {currentUser.role === RoleCode.ADMINISTRADOR &&
+                            u.role !== RoleCode.ESTUDIANTE &&
+                            u.role !== RoleCode.ADMINISTRADOR && (
+                              <button
+                                onClick={() => handleHardDeleteUser(u)}
+                                disabled={hardDeletingUserId === u.id}
+                                className="px-2.5 py-1 text-[11px] font-semibold text-white bg-red-900 hover:bg-red-950 disabled:opacity-50 rounded cursor-pointer"
+                              >
+                                {hardDeletingUserId === u.id ? 'Borrando…' : 'Borrar prueba'}
+                              </button>
+                            )}
                         </>
                       )}
                     </td>
@@ -2362,6 +2415,11 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
               <strong> conserva su historial</strong> (perfil, asignaciones, sesiones y bitácora). Sus expedientes
               quedan sin responsable y regresan a la bandeja de casos nuevos. No se pueden eliminar cuentas de
               alumnos ni la propia cuenta.
+              <br />
+              <strong className="text-red-900">Borrar prueba</strong> es una eliminación <strong>definitiva</strong>:
+              borra la cuenta de Google, el perfil, roles, asignaciones y el nombre de los registros clínicos.
+              No queda el perfil como REVOCADA ni su historial. Úsalo únicamente con cuentas ficticias de prueba
+              (psicólogos, practicantes, responsables o tutores). No aplica a alumnos ni administradores.
             </p>
           )}
         </div>

@@ -26,7 +26,7 @@ import { AuthProvider, PROFILE_SELECT, mapProfileRow, useAuth } from './context/
 import { filterCasesForUser, filterStudentsForUser } from './lib/permissionsEngine';
 
 type PrimaryView = 'ARQUITECTURA_ENTREGA_1' | 'PANEL_PRINCIPAL' | 'EXPEDIENTE_UNICO' | 'ESTUDIANTES' | 'EVALUACIONES' | 'SEGUIMIENTO' | 'USUARIOS' | 'REPORTES';
-const APP_VERSION = '2026.11.12-7';
+const APP_VERSION = '2026.11.12-8';
 const EVALUATION_PERIODS: EvaluationPeriod[] = [];
 
 function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: () => void }) {
@@ -523,6 +523,22 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     await loadDirectory();
   };
 
+  const handleHardDeleteUser = async (targetUserId: string): Promise<void> => {
+    if (!supabase) throw new Error('Supabase no está configurado.');
+    if (targetUserId === currentUser.id) throw new Error('No puedes borrar tu propia cuenta.');
+    const target = users.find((u) => u.id === targetUserId);
+    const { error } = await supabase.rpc('admin_hard_delete_user', { p_profile_id: targetUserId });
+    if (error) throw new Error(error.message || 'No se pudo borrar definitivamente la cuenta.');
+    setUsers((prev) => prev.filter((u) => u.id !== targetUserId));
+    appendAuditLog(
+      'MODIFICACION_ROL_CUENTA',
+      'profiles',
+      targetUserId,
+      `Usuario de prueba borrado definitivamente: ${target?.email ?? targetUserId}`
+    );
+    await loadDirectory();
+  };
+
   const handleStudentSubmitSelfAssessment = () => {};
 
   const authorizedCases = React.useMemo(() => filterCasesForUser(currentUser, cases, users), [currentUser, cases, users]);
@@ -697,7 +713,7 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
                 <ClinicalRecordView currentUser={currentUser} clinicalCase={selectedClinicalCase} student={selectedStudent} assessments={assessments} sessions={sessions} tasks={tasks} auditLogs={auditLogs} instrumentConfigs={INITIAL_INSTRUMENT_CONFIGS} psychologists={users.filter((u) => u.role === RoleCode.PSICOLOGO && u.status === AccountStatus.ACTIVA)} interns={users.filter((u) => u.role === RoleCode.PRACTICANTE && u.status === AccountStatus.ACTIVA)} onBack={() => setActiveView('PANEL_PRINCIPAL')} onCreateConsultationAssessment={handleCreateConsultationAssessment} onRegisterSession={handleRegisterSession} onManualPriorityElevation={handleManualPriorityElevation} onEmitTutorAlert={handleEmitTutorAlert} onTransferCase={handleTransferCase} onReleaseCase={handleReleaseCase} />
               ))}
               {(activeView === 'ESTUDIANTES' || activeView === 'EVALUACIONES' || activeView === 'SEGUIMIENTO' || activeView === 'USUARIOS' || activeView === 'REPORTES') && (
-                <ModulesView activeModule={activeView as ActiveModuleKey} currentUser={currentUser} users={users} students={authorizedStudents} cases={authorizedCases} assessments={assessments} tasks={tasks} tutorAlerts={tutorAlerts} auditLogs={auditLogs} periods={EVALUATION_PERIODS} programs={programs} instrumentConfigs={INITIAL_INSTRUMENT_CONFIGS} onOpenClinicalCase={handleOpenClinicalCase} onRegisterStudentAndSingleCase={handleRegisterStudentAndSingleCase} onCompleteFollowUpTask={handleCompleteFollowUpTask} onAssignCaseResponsible={handleAssignCaseResponsible} onRegisterTutorAction={handleRegisterTutorAction} onCreateUserProfile={handleCreateUserProfile} onUpdateUserAccountStatus={handleUpdateUserAccountStatus} onDeleteUser={handleDeleteUser} onLogReportExport={(repName, fmt, filters) => appendAuditLog('EXPORTACION_REPORTE', 'reports', repName, `Exportación ${fmt}`)} onStudentSubmitSelfAssessment={handleStudentSubmitSelfAssessment} onCreateConsultationAssessment={handleCreateConsultationAssessment} />
+                <ModulesView activeModule={activeView as ActiveModuleKey} currentUser={currentUser} users={users} students={authorizedStudents} cases={authorizedCases} assessments={assessments} tasks={tasks} tutorAlerts={tutorAlerts} auditLogs={auditLogs} periods={EVALUATION_PERIODS} programs={programs} instrumentConfigs={INITIAL_INSTRUMENT_CONFIGS} onOpenClinicalCase={handleOpenClinicalCase} onRegisterStudentAndSingleCase={handleRegisterStudentAndSingleCase} onCompleteFollowUpTask={handleCompleteFollowUpTask} onAssignCaseResponsible={handleAssignCaseResponsible} onRegisterTutorAction={handleRegisterTutorAction} onCreateUserProfile={handleCreateUserProfile} onUpdateUserAccountStatus={handleUpdateUserAccountStatus} onDeleteUser={handleDeleteUser} onHardDeleteUser={handleHardDeleteUser} onLogReportExport={(repName, fmt, filters) => appendAuditLog('EXPORTACION_REPORTE', 'reports', repName, `Exportación ${fmt}`)} onStudentSubmitSelfAssessment={handleStudentSubmitSelfAssessment} onCreateConsultationAssessment={handleCreateConsultationAssessment} />
               )}
             </>
           )}
