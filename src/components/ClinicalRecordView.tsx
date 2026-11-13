@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowLeftRight,
   Calendar,
   CheckCircle2,
   ClipboardPlus,
@@ -97,6 +98,13 @@ interface ClinicalRecordViewProps {
     generalRecommendations: string;
     authorizedActions: string[];
   }) => void;
+  onTransferCase: (
+    caseId: string,
+    psychologistId: string,
+    internId?: string | null,
+    note?: string
+  ) => Promise<void>;
+  onReleaseCase: (caseId: string, note?: string) => Promise<void>;
 }
 
 export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
@@ -108,12 +116,15 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
   tasks,
   auditLogs,
   instrumentConfigs,
+  psychologists,
   interns,
   onBack,
   onCreateConsultationAssessment,
   onRegisterSession,
   onManualPriorityElevation,
   onEmitTutorAlert,
+  onTransferCase,
+  onReleaseCase,
 }) => {
   // Verificación RLS de acceso al expediente y a las notas clínicas
   const myInternIds = interns.filter((i) => i.supervisorId === currentUser.id).map((i) => i.id);
@@ -150,11 +161,60 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
     targetCaseId: clinicalCase.id,
   }).allowed;
 
+  // ¿Puede transferir o liberar el expediente? El psicólogo responsable,
+  // el Responsable de Psicología y el Administrador.
+  const isCurrentCaseResponsible =
+    clinicalCase.assignedPsychologistId === currentUser.id ||
+    (Boolean(clinicalCase.assignedPsychologistName) &&
+      clinicalCase.assignedPsychologistName!.trim().toLowerCase() === currentUser.fullName.trim().toLowerCase());
+  const canManageAssignment =
+    currentUser.role === RoleCode.RESPONSABLE_PSICOLOGIA ||
+    currentUser.role === RoleCode.ADMINISTRADOR ||
+    (currentUser.role === RoleCode.PSICOLOGO && isCurrentCaseResponsible);
+
   // Estados para modales y secciones interactivas
   const [showNewEvaluationModal, setShowNewEvaluationModal] = useState<boolean>(false);
   const [showNewSessionModal, setShowNewSessionModal] = useState<boolean>(false);
   const [showPriorityModal, setShowPriorityModal] = useState<boolean>(false);
   const [showTutorAlertModal, setShowTutorAlertModal] = useState<boolean>(false);
+  const [showTransferModal, setShowTransferModal] = useState<boolean>(false);
+  const [transferMode, setTransferMode] = useState<'TRANSFER' | 'RELEASE'>('TRANSFER');
+  const [transferPsychologistId, setTransferPsychologistId] = useState<string>('');
+  const [transferNote, setTransferNote] = useState<string>('');
+  const [transferSaving, setTransferSaving] = useState<boolean>(false);
+  const [transferError, setTransferError] = useState<string | null>(null);
+
+  const openTransferModal = () => {
+    setTransferMode('TRANSFER');
+    setTransferPsychologistId('');
+    setTransferNote('');
+    setTransferError(null);
+    setShowTransferModal(true);
+  };
+
+  const handleTransferSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setTransferSaving(true);
+    setTransferError(null);
+    try {
+      if (transferMode === 'RELEASE') {
+        await onReleaseCase(clinicalCase.id, transferNote);
+      } else {
+        if (!transferPsychologistId) {
+          setTransferError('Selecciona el psicólogo que dará seguimiento.');
+          setTransferSaving(false);
+          return;
+        }
+        await onTransferCase(clinicalCase.id, transferPsychologistId, null, transferNote);
+      }
+      setShowTransferModal(false);
+    } catch (err: any) {
+      console.error('No se pudo actualizar la asignación del caso', err);
+      setTransferError(err?.message || 'No se pudo actualizar la asignación. Inténtalo de nuevo.');
+    } finally {
+      setTransferSaving(false);
+    }
+  };
 
   // Estado para "Nueva evaluación" durante la consulta (Ampliación Sección 3)
   const [evalInstrument, setEvalInstrument] = useState<InstrumentCode>(InstrumentCode.BAI);
@@ -435,6 +495,16 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
               <Plus className="w-4 h-4" />
               Registrar Sesión
             </button>
+
+            {canManageAssignment && (
+              <button
+                onClick={openTransferModal}
+                className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <ArrowLeftRight className="w-4 h-4" />
+                Transferir / Liberar
+              </button>
+            )}
 
             {canCloseOrModifyPriority && (
               <button
@@ -1323,6 +1393,146 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
       </div>
 
       {/* MODAL 1: BOTÓN "NUEVA EVALUACIÓN" EN CONSULTA (AMPLIACIÓN SECCIÓN 3) */}
+      {showTransferModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-xl max-w-lg w-full p-6">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h3 className="text-lg font-bold text-slate-900">
+                Transferir o liberar el expediente
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowTransferModal(false)}
+                className="text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <form onSubmit={handleTransferSubmit} className="mt-4 space-y-4 text-xs">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 leading-relaxed">
+                <div>
+                  <strong>Responsable actual:</strong>{' '}
+                  {clinicalCase.assignedPsychologistName || 'Sin responsable'}
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">
+                  Al transferir o liberar, el registro del psicólogo actual se conserva como
+                  histórico en el expediente y el nuevo responsable queda como activo.
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTransferMode('TRANSFER')}
+                  className={`px-3 py-2.5 rounded-lg border font-bold cursor-pointer transition-colors ${
+                    transferMode === 'TRANSFER'
+                      ? 'bg-[#1E3A8A] text-white border-[#1E3A8A]'
+                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  Transferir a otro psicólogo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTransferMode('RELEASE')}
+                  className={`px-3 py-2.5 rounded-lg border font-bold cursor-pointer transition-colors ${
+                    transferMode === 'RELEASE'
+                      ? 'bg-amber-600 text-white border-amber-600'
+                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  Liberar caso
+                </button>
+              </div>
+
+              {transferMode === 'TRANSFER' ? (
+                <div>
+                  <label className="block font-semibold text-slate-800 mb-1">
+                    Psicólogo que dará seguimiento *
+                  </label>
+                  <select
+                    required
+                    value={transferPsychologistId}
+                    onChange={(e) => setTransferPsychologistId(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
+                  >
+                    <option value="">Selecciona un psicólogo…</option>
+                    {psychologists
+                      .filter((p) => p.id !== clinicalCase.assignedPsychologistId)
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.fullName}
+                        </option>
+                      ))}
+                  </select>
+                  {psychologists.filter((p) => p.id !== clinicalCase.assignedPsychologistId).length === 0 && (
+                    <p className="mt-1 text-[11px] text-amber-800">
+                      No hay otro psicólogo activo. Puedes liberar el caso para que lo tome alguien
+                      más o dar de alta a otro psicólogo.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-950 leading-relaxed">
+                  El expediente quedará <strong>sin responsable</strong> y volverá a la bandeja de
+                  casos nuevos / solicitudes de consulta. Otro psicólogo podrá tomarlo. El historial
+                  del responsable actual se conserva.
+                </div>
+              )}
+
+              <div>
+                <label className="block font-semibold text-slate-800 mb-1">
+                  Nota o motivo de la transferencia (opcional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={transferNote}
+                  onChange={(e) => setTransferNote(e.target.value)}
+                  maxLength={500}
+                  placeholder="Ej. Continúa seguimiento por cambio de horario del psicólogo anterior."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg resize-none"
+                />
+              </div>
+
+              {transferError && (
+                <div className="p-3 rounded-lg border border-rose-200 bg-rose-50 text-rose-900">
+                  {transferError}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setShowTransferModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 rounded-lg cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={
+                    transferSaving ||
+                    (transferMode === 'TRANSFER' && !transferPsychologistId)
+                  }
+                  className={`px-4 py-2 text-xs font-semibold text-white rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                    transferMode === 'TRANSFER'
+                      ? 'bg-[#1E3A8A] hover:bg-blue-900'
+                      : 'bg-amber-600 hover:bg-amber-700'
+                  }`}
+                >
+                  {transferSaving
+                    ? 'Guardando…'
+                    : transferMode === 'TRANSFER'
+                      ? 'Transferir caso'
+                      : 'Liberar caso'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showNewEvaluationModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
           <div className="bg-white border border-slate-200 rounded-xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">

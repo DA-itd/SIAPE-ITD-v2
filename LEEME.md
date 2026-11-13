@@ -17,6 +17,9 @@
    - `supabase/20261112_folio_expediente.sql`: genera el folio visible del expediente
      con el formato `SIAPE-ITD-X-YYYY-ZZZ` (X = A enero-junio, B julio-diciembre;
      ZZZ = consecutivo anual desde 001) y renumera los expedientes existentes.
+   - `supabase/20261112_transferir_casos.sql`: permite al psicólogo responsable
+     liberar un caso (vuelve a la bandeja) o transferirlo a otro psicólogo. Las
+     asignaciones anteriores se conservan como historial en el expediente.
    Al final del primer script se imprime un conteo de alumnos/expedientes para verificar.
 2. Recompila y vuelve a desplegar la app (`npm run build` o el deploy de Vercel).
 3. El alumno ya elige su carrera desde un menú en “Mis Datos”; el psicólogo ve una bandeja

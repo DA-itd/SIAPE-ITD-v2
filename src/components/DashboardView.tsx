@@ -53,6 +53,7 @@ interface DashboardViewProps {
   allUsers?: UserProfile[];
   onOpenClinicalCase: (caseId: string) => void;
   onClaimCase?: (caseId: string) => Promise<void>;
+  onReleaseCase?: (caseId: string, note?: string) => Promise<void>;
   onQuickAssignPsychologist: (caseId: string, psychologistId: string) => void;
   onNavigateModule: (moduleKey: string) => void;
 }
@@ -68,6 +69,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   allUsers,
   onOpenClinicalCase,
   onClaimCase,
+  onReleaseCase,
   onQuickAssignPsychologist,
   onNavigateModule,
 }) => {
@@ -186,6 +188,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     } catch (err: any) {
       console.error('No se pudo tomar el caso', err);
       setClaimError(err?.message || 'No se pudo tomar el caso. Inténtalo de nuevo.');
+    } finally {
+      setClaimingCaseId(null);
+    }
+  };
+
+  const handleRelease = async (caseId: string) => {
+    if (!onReleaseCase) return;
+    const ok = window.confirm(
+      '¿Liberar este caso? Volverá a la bandeja para que otro psicólogo lo tome. ' +
+      'El registro del psicólogo que lo inició se conserva en el historial del expediente.'
+    );
+    if (!ok) return;
+    setClaimingCaseId(caseId);
+    setClaimError(null);
+    try {
+      await onReleaseCase(caseId);
+    } catch (err: any) {
+      console.error('No se pudo liberar el caso', err);
+      setClaimError(err?.message || 'No se pudo liberar el caso. Inténtalo de nuevo.');
     } finally {
       setClaimingCaseId(null);
     }
@@ -391,7 +412,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       </p>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
                     {unassigned && onClaimCase && (
                       <button
                         onClick={() => handleClaim(clinicalCase.id)}
@@ -399,6 +420,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         className="px-3.5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-lg cursor-pointer whitespace-nowrap shadow-sm transition-colors"
                       >
                         {claimingCaseId === clinicalCase.id ? 'Tomando…' : 'Tomar caso'}
+                      </button>
+                    )}
+                    {assignedToMe && onReleaseCase && (
+                      <button
+                        onClick={() => handleRelease(clinicalCase.id)}
+                        disabled={claimingCaseId === clinicalCase.id}
+                        className="px-3.5 py-2 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 disabled:opacity-50 rounded-lg cursor-pointer whitespace-nowrap transition-colors"
+                      >
+                        {claimingCaseId === clinicalCase.id ? 'Liberando…' : 'Liberar caso'}
                       </button>
                     )}
                     <button
