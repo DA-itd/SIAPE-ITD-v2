@@ -7,7 +7,6 @@ const ACTIVITY_LABELS: Record<string, string> = {
   CALIFICACION_DETERMINISTA: 'Resultado calculado',
   CAMBIO_PRIORIDAD_MANUAL: 'Cambio de prioridad',
   REGISTRO_SESION: 'Sesión registrada',
-  ALERTA_TUTORIA_AUTORIZADA: 'Alerta a tutoría',
   EXPORTACION_REPORTE: 'Reporte descargado',
   MODIFICACION_ROL_CUENTA: 'Cambio en cuentas',
   INTENTO_ACCESO_DENEGADO_RLS: 'Acceso no permitido',
@@ -19,7 +18,6 @@ const ACTIVITY_ROLE_LABELS: Record<string, string> = {
   PSICOLOGO: 'Psicólogo(a)',
   PRACTICANTE: 'Practicante',
   ESTUDIANTE: 'Alumno',
-  TUTOR_ACADEMICO: 'Tutor(a)',
 };
 import {
   AlertCircle,
@@ -42,7 +40,6 @@ import {
 } from 'lucide-react';
 import {
   AcademicProgram,
-  AcademicSupportAlert,
   AccountStatus,
   AssessmentRecord,
   AssessmentStatus,
@@ -68,7 +65,6 @@ export type ActiveModuleKey =
   | 'ESTUDIANTES'
   | 'EVALUACIONES'
   | 'SEGUIMIENTO'
-  | 'TUTORIAS'
   | 'USUARIOS'
   | 'REPORTES';
 
@@ -80,7 +76,6 @@ interface ModulesViewProps {
   cases: ClinicalCaseRecord[];
   assessments: AssessmentRecord[];
   tasks: FollowUpTask[];
-  tutorAlerts: AcademicSupportAlert[];
   auditLogs: AuditLogEntry[];
   periods: EvaluationPeriod[];
   programs: AcademicProgram[];
@@ -102,7 +97,6 @@ interface ModulesViewProps {
     psychologistId?: string | null,
     internId?: string | null
   ) => void;
-  onRegisterTutorAction: (alertId: string, actionSummary: string) => void;
   onCreateUserProfile: (payload: {
     fullName: string;
     email: string;
@@ -141,7 +135,6 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
   cases,
   assessments,
   tasks,
-  tutorAlerts,
   auditLogs,
   periods,
   programs,
@@ -150,7 +143,6 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
   onRegisterStudentAndSingleCase,
   onCompleteFollowUpTask,
   onAssignCaseResponsible,
-  onRegisterTutorAction,
   onCreateUserProfile,
   onUpdateUserAccountStatus,
   onDeleteUser,
@@ -222,9 +214,6 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
     'TODOS'
   );
   const [taskNoteMap, setTaskNoteMap] = useState<Record<string, string>>({});
-
-  // Estados para Módulo de Tutorías
-  const [tutorActionInputMap, setTutorActionInputMap] = useState<Record<string, string>>({});
 
   // Estados para Módulo de Administración de Usuarios
   const [usrFullName, setUsrFullName] = useState('');
@@ -1940,131 +1929,6 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
   }
 
   // ============================================================================
-  // 4. MÓDULO DE TUTORÍAS ACADÉMICAS CON PERMISOS LIMITADOS (SECCIÓN 13)
-  // ============================================================================
-  if (activeModule === 'TUTORIAS') {
-    return (
-      <div className="space-y-6">
-        <div className="bg-white border border-slate-200 rounded-xl p-6">
-          <div className="border-b border-slate-200 pb-4">
-            <div className="text-xs font-semibold text-[#1E3A8A]">
-              Coordinación de Psicología · Tutoría Académica
-            </div>
-            <h2 className="text-lg font-bold text-slate-900 mt-0.5">
-              Alertas de acompañamiento académico
-            </h2>
-            <p className="text-xs text-slate-600 mt-1">
-              El tutor ve solo los datos académicos y las recomendaciones generales que Psicología autoriza. Nunca ve respuestas de cuestionarios, puntajes, notas clínicas ni antecedentes de atención.
-            </p>
-          </div>
-
-          <div className="mt-5 space-y-4">
-            {tutorAlerts.map((alert) => (
-              <div
-                key={alert.id}
-                className="border border-slate-200 rounded-xl p-5 space-y-3 text-xs"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
-                  <div>
-                    <span className="font-mono font-bold text-[#7C1D36] mr-2">
-                      Matrícula: {alert.studentMatricula}
-                    </span>
-                    <span className="text-sm font-bold text-slate-900">
-                      {alert.studentFullName}
-                    </span>
-                    <span className="text-slate-500 ml-2">
-                      · {alert.studentProgram} ({alert.studentSemester}° Sem, Grupo{' '}
-                      {alert.studentGroup})
-                    </span>
-                  </div>
-                  <span className="font-mono font-semibold text-[#1E3A8A]">
-                    Estado: {alert.status}
-                  </span>
-                </div>
-
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
-                  <div className="font-bold text-slate-900">
-                    Recomendaciones Generales de Apoyo Académico (Autorizadas por{' '}
-                    {alert.authorizedByPsychologistName}):
-                  </div>
-                  <p className="text-slate-700 mt-1 leading-relaxed">
-                    {alert.generalAcademicRecommendations}
-                  </p>
-                  <div className="text-[11px] font-mono text-slate-500 mt-1.5">
-                    Fecha de autorización: {alert.createdAt.replace('T', ' ').slice(0, 16)} · Tutor
-                    asignado: {alert.assignedTutorName}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="font-semibold text-slate-800 mb-1">
-                    Acciones de acompañamiento autorizadas:
-                  </div>
-                  <ul className="list-disc list-inside text-slate-700 space-y-1">
-                    {alert.authorizedTutorActions.map((act, i) => (
-                      <li key={i}>{act}</li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="pt-2 border-t border-slate-100 space-y-2">
-                  <div className="font-semibold text-slate-800">
-                    Bitácora de Acciones de Acompañamiento Registradas por el Tutor:
-                  </div>
-                  {alert.tutorRegisteredActions.length === 0 ? (
-                    <div className="text-slate-500">
-                      Aún no se han registrado acciones tutoriales en esta alerta.
-                    </div>
-                  ) : (
-                    alert.tutorRegisteredActions.map((ta) => (
-                      <div
-                        key={ta.id}
-                        className="p-2.5 bg-emerald-50/50 border border-emerald-200 rounded-lg"
-                      >
-                        <div className="flex justify-between font-mono text-[11px] text-emerald-900">
-                          <span>{ta.tutorName}</span>
-                          <span>{ta.registeredAt.replace('T', ' ').slice(0, 16)}</span>
-                        </div>
-                        <p className="text-slate-800 mt-1">{ta.actionSummary}</p>
-                      </div>
-                    ))
-                  )}
-
-                  <div className="flex items-center gap-2 pt-2">
-                    <input
-                      type="text"
-                      value={tutorActionInputMap[alert.id] || ''}
-                      onChange={(e) =>
-                        setTutorActionInputMap((prev) => ({
-                          ...prev,
-                          [alert.id]: e.target.value,
-                        }))
-                      }
-                      placeholder="Registrar acción de acompañamiento académico realizada por el tutor..."
-                      className="flex-1 px-3 py-1.5 border border-slate-300 rounded-lg"
-                    />
-                    <button
-                      onClick={() => {
-                        const text = tutorActionInputMap[alert.id];
-                        if (!text?.trim()) return;
-                        onRegisterTutorAction(alert.id, text.trim());
-                        setTutorActionInputMap((prev) => ({ ...prev, [alert.id]: '' }));
-                      }}
-                      className="px-3.5 py-1.5 font-semibold text-white bg-[#1E3A8A] rounded-lg cursor-pointer whitespace-nowrap"
-                    >
-                      Registrar Acción Tutorial
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ============================================================================
   // 5. MÓDULO DE ADMINISTRACIÓN DE USUARIOS Y AUDITORÍA (SECCIÓN 7)
   // ============================================================================
   if (activeModule === 'USUARIOS') {
@@ -2419,7 +2283,7 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
               <strong className="text-red-900">Borrar prueba</strong> es una eliminación <strong>definitiva</strong>:
               borra la cuenta de Google, el perfil, roles, asignaciones y el nombre de los registros clínicos.
               No queda el perfil como REVOCADA ni su historial. Úsalo únicamente con cuentas ficticias de prueba
-              (psicólogos, practicantes, responsables o tutores). No aplica a alumnos ni administradores.
+              (psicólogos, practicantes o responsables). No aplica a alumnos ni administradores.
             </p>
           )}
         </div>
@@ -2430,7 +2294,7 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
             Historial de actividad
           </h3>
           <p className="text-xs text-slate-600 mb-4">
-            Registra las consultas a expedientes, los resultados calculados, los cambios de prioridad, las alertas a tutoría, los reportes descargados y los cambios en cuentas.
+            Registra las consultas a expedientes, los resultados calculados, los cambios de prioridad, los reportes descargados y los cambios en cuentas.
           </p>
           <div className="overflow-x-auto border border-slate-200 rounded-lg max-h-80">
             <table className="w-full text-left border-collapse text-xs">

@@ -9,7 +9,6 @@ export enum RoleCode {
   PSICOLOGO = 'PSICOLOGO',
   PRACTICANTE = 'PRACTICANTE',
   ESTUDIANTE = 'ESTUDIANTE',
-  TUTOR_ACADEMICO = 'TUTOR_ACADEMICO',
 }
 
 export enum AccountStatus {
@@ -136,6 +135,43 @@ export interface StudentRecord {
   suicideProtocolSiCount?: number;
 }
 
+// Importación de alumnos desde CSV o alta individual
+export interface StudentImportRow {
+  fila?: number;
+  matricula: string;
+  full_name: string;
+  email: string;
+  program_name: string;
+  program_code?: string | null;
+  semester?: number | null;
+  group_code?: string | null;
+  entry_generation?: string | null;
+  modality?: string | null;
+}
+
+export interface StudentImportError {
+  fila: number;
+  matricula: string;
+  message: string;
+}
+
+export interface StudentImportResultRow {
+  fila: number;
+  matricula: string;
+  studentId: string;
+  caseId: string;
+  status: 'CREATED' | 'UPDATED' | string;
+}
+
+export interface StudentImportResult {
+  total: number;
+  inserted: number;
+  updated: number;
+  casesCreated: number;
+  errors: StudentImportError[];
+  results: StudentImportResultRow[];
+}
+
 // 4. evaluation_periods
 export interface EvaluationPeriod {
   id: string;
@@ -225,7 +261,7 @@ export interface PsychologySession {
   participatingInternId: string | null;
   participatingInternName: string | null;
   attentionMotive: string;
-  clinicalNotes: string; // Protegido estrictamente por RLS (oculto a tutores y administradores sin permiso clínico)
+  clinicalNotes: string; // Protegido estrictamente por RLS (oculto a administradores sin permiso clínico)
   professionalObservations: string;
   agreements: string;
   nextAction: string;
@@ -255,7 +291,7 @@ export interface CaseReferral {
   clinicalCaseId: string;
   referredAt: string;
   referredByPsychologistName: string;
-  destinationInstitution: string; // Ej. "Servicios de Salud de Durango / Psiquiatría", "Tutoría Académica ITD"
+  destinationInstitution: string; // Ej. "Servicios de Salud de Durango / Psiquiatría"
   reasonSummary: string;
   status: 'ENVIADA' | 'EN_PROCESO' | 'ATENDIDA';
 }
@@ -346,34 +382,6 @@ export interface ClinicalCaseRecord {
   priorityHistory: PriorityChangeRecord[];
 }
 
-// 12. tutor_assignments + academic_support_alerts (Módulo de Tutorías con aislamiento estricto)
-export interface AcademicSupportAlert {
-  id: string;
-  clinicalCaseId: string;
-  studentId: string;
-  studentMatricula: string;
-  studentFullName: string;
-  studentProgram: string;
-  studentSemester: number;
-  studentGroup: string;
-  authorizedByPsychologistId: string;
-  authorizedByPsychologistName: string;
-  assignedTutorId: string;
-  assignedTutorName: string;
-  createdAt: string;
-  requiresAcademicAccompaniment: boolean;
-  generalAcademicRecommendations: string; // NUNCA incluye notas clínicas, reactivos ni puntajes BAI/BDI
-  authorizedTutorActions: string[];
-  tutorRegisteredActions: {
-    id: string;
-    registeredAt: string;
-    tutorName: string;
-    actionSummary: string;
-    activityState: 'PENDIENTE' | 'EN_CURSO' | 'COMPLETADA';
-  }[];
-  status: 'ACTIVA' | 'EN_SEGUIMIENTO_TUTORIAL' | 'ATENDIDA';
-}
-
 // 13. audit_logs
 export interface AuditLogEntry {
   id: string;
@@ -387,7 +395,6 @@ export interface AuditLogEntry {
     | 'CALIFICACION_DETERMINISTA'
     | 'CAMBIO_PRIORIDAD_MANUAL'
     | 'REGISTRO_SESION'
-    | 'ALERTA_TUTORIA_AUTORIZADA'
     | 'EXPORTACION_REPORTE'
     | 'MODIFICACION_ROL_CUENTA'
     | 'INTENTO_ACCESO_DENEGADO_RLS'

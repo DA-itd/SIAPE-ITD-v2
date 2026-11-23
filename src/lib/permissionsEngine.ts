@@ -79,7 +79,7 @@ export function canUserViewClinicalCase(
     return clinicalCase.assignedInternId === currentUser.id;
   }
 
-  // 4. Estudiantes y tutores no tienen acceso clínico directo
+  // 4. Los estudiantes no tienen acceso clínico directo
   return false;
 }
 

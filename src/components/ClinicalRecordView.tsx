@@ -92,12 +92,6 @@ interface ClinicalRecordViewProps {
     institutionalActionTaken: string;
     nextFollowUpState: CaseFollowUpState;
   }) => void;
-  onEmitTutorAlert: (payload: {
-    clinicalCaseId: string;
-    studentId: string;
-    generalRecommendations: string;
-    authorizedActions: string[];
-  }) => void;
   onTransferCase: (
     caseId: string,
     psychologistId: string,
@@ -122,7 +116,6 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
   onCreateConsultationAssessment,
   onRegisterSession,
   onManualPriorityElevation,
-  onEmitTutorAlert,
   onTransferCase,
   onReleaseCase,
 }) => {
@@ -176,7 +169,6 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
   const [showNewEvaluationModal, setShowNewEvaluationModal] = useState<boolean>(false);
   const [showNewSessionModal, setShowNewSessionModal] = useState<boolean>(false);
   const [showPriorityModal, setShowPriorityModal] = useState<boolean>(false);
-  const [showTutorAlertModal, setShowTutorAlertModal] = useState<boolean>(false);
   const [showTransferModal, setShowTransferModal] = useState<boolean>(false);
   const [transferMode, setTransferMode] = useState<'TRANSFER' | 'RELEASE'>('TRANSFER');
   const [transferPsychologistId, setTransferPsychologistId] = useState<string>('');
@@ -257,14 +249,6 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
   );
   const [manualFollowUpState, setManualFollowUpState] = useState<CaseFollowUpState>(
     clinicalCase.followUpState
-  );
-
-  // Estado para alerta a Tutoría Académica (sin datos clínicos)
-  const [tutorRecs, setTutorRecs] = useState<string>(
-    'Se sugiere acompañamiento académico en organización de horarios de estudio y orientación sobre asesorías departamentales.'
-  );
-  const [tutorAction1, setTutorAction1] = useState<string>(
-    'Entrevista tutorial de seguimiento académico'
   );
 
   const caseAssessments = useMemo(
@@ -427,21 +411,6 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
     setManualJustification('');
   };
 
-  const handleSubmitTutorAlert = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!tutorRecs.trim()) return;
-    onEmitTutorAlert({
-      clinicalCaseId: clinicalCase.id,
-      studentId: student.id,
-      generalRecommendations: tutorRecs,
-      authorizedActions: [
-        tutorAction1,
-        'Seguimiento de asistencia e integración académica sin solicitar información clínica',
-      ],
-    });
-    setShowTutorAlertModal(false);
-  };
-
   return (
     <div className="space-y-6">
       {/* BARRA SUPERIOR DEL EXPEDIENTE ÚNICO */}
@@ -513,16 +482,6 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
               >
                 <ShieldAlert className="w-3.5 h-3.5 text-rose-700" />
                 Prioridad / Estado del Caso
-              </button>
-            )}
-
-            {canCloseOrModifyPriority && (
-              <button
-                onClick={() => setShowTutorAlertModal(true)}
-                className="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
-              >
-                <Send className="w-3.5 h-3.5 text-[#1E3A8A]" />
-                Alerta a Tutoría
               </button>
             )}
 
@@ -1800,7 +1759,7 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
                   required
                   value={sessionNotes}
                   onChange={(e) => setSessionNotes(e.target.value)}
-                  placeholder="Descripción clínica de la sesión (oculta a tutores académicos y administradores)..."
+                  placeholder="Descripción clínica de la sesión (oculta a administradores)..."
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                 />
               </div>
@@ -2010,74 +1969,6 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
         </div>
       )}
 
-      {/* MODAL 4: EMITIR ALERTA DE ACOMPAÑAMIENTO ACADÉMICO A TUTORÍA */}
-      {showTutorAlertModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-xl max-w-xl w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-lg font-bold text-slate-900">
-                Autorizar Alerta de Acompañamiento para Tutoría Académica
-              </h3>
-              <button
-                onClick={() => setShowTutorAlertModal(false)}
-                className="text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
-              >
-                Cerrar
-              </button>
-            </div>
-
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-950">
-              <strong>Confidencialidad:</strong> El tutor académico{' '}
-              <strong>NO</strong> podrá ver reactivos, respuestas, puntuaciones BAI/BDI ni notas clínicas.
-              Únicamente recibirá las recomendaciones generales de apoyo académico autorizadas aquí.
-            </div>
-
-            <form onSubmit={handleSubmitTutorAlert} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-800 mb-1">
-                  Recomendaciones Generales de Apoyo Académico *
-                </label>
-                <textarea
-                  rows={3}
-                  required
-                  value={tutorRecs}
-                  onChange={(e) => setTutorRecs(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-800 mb-1">
-                  Acción de Acompañamiento Autorizada para el Tutor *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={tutorAction1}
-                  onChange={(e) => setTutorAction1(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setShowTutorAlertModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 rounded-lg cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 text-xs font-semibold text-white bg-[#1E3A8A] hover:bg-blue-900 rounded-lg cursor-pointer"
-                >
-                  Emitir Alerta Auditada al Tutor
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

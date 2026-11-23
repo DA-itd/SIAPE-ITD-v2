@@ -9,7 +9,7 @@ import {
   GraduationCap, LayoutDashboard, Lock, ShieldCheck, UserCog, X,
 } from 'lucide-react';
 import {
-  AcademicProgram, AcademicSupportAlert, AccountStatus, AssessmentRecord, AssessmentStatus,
+  AcademicProgram, AccountStatus, AssessmentRecord, AssessmentStatus,
   AttentionModality, AuditLogEntry, CaseAssignmentHistoryEntry, CaseFollowUpState, ClinicalCaseRecord,
   EvaluationPeriod, FollowUpTask, InstrumentCode, PriorityLevel,
   PsychologySession, RoleCode, StudentConsultationStatus, StudentRecord, UserProfile,
@@ -22,6 +22,7 @@ import { ClinicalRecordView } from './components/ClinicalRecordView';
 import { ActiveModuleKey, ModulesView } from './components/ModulesView';
 import { StudentPortalView } from './components/StudentPortalView';
 import { LoginScreen } from './components/LoginScreen';
+import { ConsentGate } from './components/ConsentGate';
 import { AuthProvider, PROFILE_SELECT, mapProfileRow, useAuth } from './context/AuthContext';
 import { filterCasesForUser, filterStudentsForUser } from './lib/permissionsEngine';
 
@@ -38,7 +39,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
   const [consultationStatus, setConsultationStatus] = useState<StudentConsultationStatus | null>(null);
   const [sessions, setSessions] = useState<PsychologySession[]>([]);
   const [tasks, setTasks] = useState<FollowUpTask[]>([]);
-  const [tutorAlerts, setTutorAlerts] = useState<AcademicSupportAlert[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [viewAsStudentMode, setViewAsStudentMode] = useState<boolean>(false);
   const [activeView, setActiveView] = useState<PrimaryView>(authUser.role === RoleCode.ESTUDIANTE ? 'EVALUACIONES' : 'PANEL_PRINCIPAL');
@@ -456,15 +456,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     appendAuditLog(payload.urgentProtocolTriggered ? 'ACTIVACION_PROTOCOLO_URGENTE' : 'CAMBIO_PRIORIDAD_MANUAL', 'clinical_cases', payload.clinicalCaseId, payload.justification);
   };
 
-  const handleEmitTutorAlert = (payload: any) => {
-    const stu = students.find((s) => s.id === payload.studentId);
-    if (!stu) return;
-    setTutorAlerts((prev) => [{
-      id: `alrt-tut-${Date.now()}`, clinicalCaseId: payload.clinicalCaseId, studentId: stu.id, studentMatricula: stu.matricula, studentFullName: stu.fullName, studentProgram: stu.programName, studentSemester: stu.semester, studentGroup: stu.group, authorizedByPsychologistId: currentUser.id, authorizedByPsychologistName: currentUser.fullName, assignedTutorId: users.find((u) => u.role === RoleCode.TUTOR_ACADEMICO)?.id ?? '', assignedTutorName: users.find((u) => u.role === RoleCode.TUTOR_ACADEMICO)?.fullName ?? 'Sin tutor', createdAt: new Date().toISOString(), requiresAcademicAccompaniment: true, generalAcademicRecommendations: payload.generalRecommendations, authorizedTutorActions: payload.authorizedActions, tutorRegisteredActions: [], status: 'ACTIVA',
-    }, ...prev]);
-    appendAuditLog('ALERTA_TUTORIA_AUTORIZADA', 'academic_support_alerts', `alrt-${Date.now()}`, `Alerta emitida para ${stu.matricula}`);
-  };
-
   const handleRegisterStudentAndSingleCase = (payload: any): any => {
     const existingStudent = students.find((s) => s.matricula.toLowerCase() === payload.matricula.toLowerCase() || s.institutionalEmail.toLowerCase() === payload.institutionalEmail.toLowerCase());
     if (existingStudent) {
@@ -487,10 +478,6 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
     if (!targetTask) return;
     setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, status: 'COMPLETADA', completedAt: new Date().toISOString(), outcomeNote } : t));
     setCases((prev) => prev.map((c) => c.id === targetTask.clinicalCaseId ? { ...c, followUpState: CaseFollowUpState.EN_ATENCION, nextFollowUpAction: outcomeNote, nextFollowUpDate: nextDate } : c));
-  };
-
-  const handleRegisterTutorAction = (alertId: string, actionSummary: string) => {
-    setTutorAlerts((prev) => prev.map((a) => a.id === alertId ? { ...a, status: 'EN_SEGUIMIENTO_TUTORIAL', tutorRegisteredActions: [...a.tutorRegisteredActions, { id: `tact-${Date.now()}`, registeredAt: new Date().toISOString(), tutorName: currentUser.fullName, actionSummary, activityState: 'COMPLETADA' }] } : a));
   };
 
   const handleCreateUserProfile = async (payload: any) => {
@@ -710,10 +697,10 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
                 <DashboardView currentUser={currentUser} students={authorizedStudents} cases={authorizedCases} assessments={assessments} tasks={tasks} programs={programs} psychologists={users.filter((u) => u.role === RoleCode.PSICOLOGO && u.status === AccountStatus.ACTIVA)} allUsers={users} onOpenClinicalCase={handleOpenClinicalCase} onClaimCase={handleClaimCase} onReleaseCase={handleReleaseCase} onQuickAssignPsychologist={(caseId, psychId) => handleAssignCaseResponsible(caseId, psychId, null)} onNavigateModule={(modKey) => setActiveView(modKey as PrimaryView)} />
               )}
               {activeView === 'EXPEDIENTE_UNICO' && (!selectedClinicalCase || !selectedStudent ? (<div className="p-6 text-sm text-[#4A6B53] bg-white border border-[#E8E2D5] rounded-xl">Aún no hay expedientes disponibles.</div>) : (
-                <ClinicalRecordView currentUser={currentUser} clinicalCase={selectedClinicalCase} student={selectedStudent} assessments={assessments} sessions={sessions} tasks={tasks} auditLogs={auditLogs} instrumentConfigs={INITIAL_INSTRUMENT_CONFIGS} psychologists={users.filter((u) => u.role === RoleCode.PSICOLOGO && u.status === AccountStatus.ACTIVA)} interns={users.filter((u) => u.role === RoleCode.PRACTICANTE && u.status === AccountStatus.ACTIVA)} onBack={() => setActiveView('PANEL_PRINCIPAL')} onCreateConsultationAssessment={handleCreateConsultationAssessment} onRegisterSession={handleRegisterSession} onManualPriorityElevation={handleManualPriorityElevation} onEmitTutorAlert={handleEmitTutorAlert} onTransferCase={handleTransferCase} onReleaseCase={handleReleaseCase} />
+                <ClinicalRecordView currentUser={currentUser} clinicalCase={selectedClinicalCase} student={selectedStudent} assessments={assessments} sessions={sessions} tasks={tasks} auditLogs={auditLogs} instrumentConfigs={INITIAL_INSTRUMENT_CONFIGS} psychologists={users.filter((u) => u.role === RoleCode.PSICOLOGO && u.status === AccountStatus.ACTIVA)} interns={users.filter((u) => u.role === RoleCode.PRACTICANTE && u.status === AccountStatus.ACTIVA)} onBack={() => setActiveView('PANEL_PRINCIPAL')} onCreateConsultationAssessment={handleCreateConsultationAssessment} onRegisterSession={handleRegisterSession} onManualPriorityElevation={handleManualPriorityElevation} onTransferCase={handleTransferCase} onReleaseCase={handleReleaseCase} />
               ))}
               {(activeView === 'ESTUDIANTES' || activeView === 'EVALUACIONES' || activeView === 'SEGUIMIENTO' || activeView === 'USUARIOS' || activeView === 'REPORTES') && (
-                <ModulesView activeModule={activeView as ActiveModuleKey} currentUser={currentUser} users={users} students={authorizedStudents} cases={authorizedCases} assessments={assessments} tasks={tasks} tutorAlerts={tutorAlerts} auditLogs={auditLogs} periods={EVALUATION_PERIODS} programs={programs} instrumentConfigs={INITIAL_INSTRUMENT_CONFIGS} onOpenClinicalCase={handleOpenClinicalCase} onRegisterStudentAndSingleCase={handleRegisterStudentAndSingleCase} onCompleteFollowUpTask={handleCompleteFollowUpTask} onAssignCaseResponsible={handleAssignCaseResponsible} onRegisterTutorAction={handleRegisterTutorAction} onCreateUserProfile={handleCreateUserProfile} onUpdateUserAccountStatus={handleUpdateUserAccountStatus} onDeleteUser={handleDeleteUser} onHardDeleteUser={handleHardDeleteUser} onLogReportExport={(repName, fmt, filters) => appendAuditLog('EXPORTACION_REPORTE', 'reports', repName, `Exportación ${fmt}`)} onStudentSubmitSelfAssessment={handleStudentSubmitSelfAssessment} onCreateConsultationAssessment={handleCreateConsultationAssessment} />
+                <ModulesView activeModule={activeView as ActiveModuleKey} currentUser={currentUser} users={users} students={authorizedStudents} cases={authorizedCases} assessments={assessments} tasks={tasks} auditLogs={auditLogs} periods={EVALUATION_PERIODS} programs={programs} instrumentConfigs={INITIAL_INSTRUMENT_CONFIGS} onOpenClinicalCase={handleOpenClinicalCase} onRegisterStudentAndSingleCase={handleRegisterStudentAndSingleCase} onCompleteFollowUpTask={handleCompleteFollowUpTask} onAssignCaseResponsible={handleAssignCaseResponsible} onCreateUserProfile={handleCreateUserProfile} onUpdateUserAccountStatus={handleUpdateUserAccountStatus} onDeleteUser={handleDeleteUser} onHardDeleteUser={handleHardDeleteUser} onLogReportExport={(repName, fmt, filters) => appendAuditLog('EXPORTACION_REPORTE', 'reports', repName, `Exportación ${fmt}`)} onStudentSubmitSelfAssessment={handleStudentSubmitSelfAssessment} onCreateConsultationAssessment={handleCreateConsultationAssessment} />
               )}
             </>
           )}
@@ -726,7 +713,10 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
 function AuthGate() {
   const { status, profile, signOut } = useAuth();
   if (status !== 'READY' || !profile) return <LoginScreen />;
-  return <AppShell key={profile.id} authUser={profile} onSignOut={signOut} />;
+  const shell = <AppShell key={profile.id} authUser={profile} onSignOut={signOut} />;
+  return profile.role === RoleCode.ESTUDIANTE
+    ? <ConsentGate onSignOut={signOut}>{shell}</ConsentGate>
+    : shell;
 }
 
 export default function App() {

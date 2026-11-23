@@ -12,7 +12,6 @@ const DEPARTMENT_BY_ROLE: Record<string, string> = {
   PSICOLOGO: 'Oficina de Psicología',
   PRACTICANTE: 'Servicio Social / Prácticas',
   ESTUDIANTE: 'Estudiante ITD',
-  TUTOR_ACADEMICO: 'Tutorías Académicas',
 };
 
 export function mapProfileRow(row: any): UserProfile {
