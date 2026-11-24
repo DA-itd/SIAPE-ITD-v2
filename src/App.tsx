@@ -12,7 +12,7 @@ import {
   AcademicProgram, AccountStatus, AssessmentRecord, AssessmentStatus,
   AttentionModality, AuditLogEntry, CaseAssignmentHistoryEntry, CaseFollowUpState, ClinicalCaseRecord,
   EvaluationPeriod, FollowUpTask, InstrumentCode, PriorityLevel,
-  PsychologySession, RoleCode, StudentConsultationStatus, StudentRecord, UserProfile,
+  PsychologistOption, PsychologySession, RoleCode, StudentConsultationStatus, StudentRecord, UserProfile,
 } from './types/siape';
 import { ITD_ACADEMIC_PROGRAMS } from './data/academicPrograms';
 import { INITIAL_INSTRUMENT_CONFIGS, evaluateInstrumentDeterministically } from './lib/scoringEngine';
@@ -37,6 +37,7 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
   const [cases, setCases] = useState<ClinicalCaseRecord[]>([]);
   const [assessments, setAssessments] = useState<AssessmentRecord[]>([]);
   const [consultationStatus, setConsultationStatus] = useState<StudentConsultationStatus | null>(null);
+  const [psychologistOptions, setPsychologistOptions] = useState<PsychologistOption[]>([]);
   const [sessions, setSessions] = useState<PsychologySession[]>([]);
   const [tasks, setTasks] = useState<FollowUpTask[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
@@ -124,6 +125,8 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
           consultationRequested: !!c.consultation_requested,
           consultationRequestedAt: c.consultation_requested_at ?? null,
           consultationRequestNote: c.consultation_request_note ?? null,
+          preferredPsychologistId: c.preferred_psychologist_id ?? null,
+          preferredPsychologistName: c.preferred_psychologist_name ?? null,
         } as ClinicalCaseRecord;
       });
 
@@ -251,8 +254,30 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
 
   useEffect(() => { loadMyConsultation(); }, [loadMyConsultation]);
 
-  const handleRequestConsultation = async (note?: string): Promise<void> => {
+  // Psicólogos que el alumno puede elegir (solo nombre y título, sin correos)
+  const loadPsychologistOptions = React.useCallback(async () => {
+    if (!supabase || authUser.role !== RoleCode.ESTUDIANTE) return;
+    const { data, error } = await supabase.rpc('list_psychologists_for_students');
+    if (error) {
+      console.warn('No se pudo cargar la lista de psicólogos', error);
+      return;
+    }
+    setPsychologistOptions(
+      (data ?? []).map((p: any) => ({ id: p.id, fullName: p.full_name, titleLabel: p.title_label ?? null }))
+    );
+  }, [authUser]);
+
+  useEffect(() => { loadPsychologistOptions(); }, [loadPsychologistOptions]);
+
+  const handleRequestConsultation = async (note?: string, preferredPsychologistId?: string | null): Promise<void> => {
     if (!supabase) throw new Error('Supabase no está configurado.');
+    // La preferencia solo se guarda si cambió. No asigna el caso: Psicología decide.
+    const wanted = preferredPsychologistId ?? null;
+    const current = consultationStatus?.preferredPsychologistId ?? null;
+    if (wanted !== current) {
+      const { error: prefError } = await supabase.rpc('set_my_psychologist_preference', { p_psychologist: wanted });
+      if (prefError) throw new Error(prefError.message || 'No se pudo guardar tu preferencia.');
+    }
     const { data, error } = await supabase.rpc('request_my_consultation', {
       p_note: note?.trim() ? note.trim() : null,
     });
@@ -608,9 +633,10 @@ function AppShell({ authUser, onSignOut }: { authUser: UserProfile; onSignOut: (
             programs={programs}
             assessments={assessments.filter((a) => a.studentId === targetStudent.id)}
             consultationStatus={consultationStatus}
-            onRequestConsultation={async (note) => {
+            psychologistOptions={psychologistOptions}
+            onRequestConsultation={async (note, preferredPsychologistId) => {
               if (viewAsStudentMode) throw new Error('Vista previa: no se envía la solicitud.');
-              await handleRequestConsultation(note);
+              await handleRequestConsultation(note, preferredPsychologistId);
             }}
             onUpdateStudentRecord={async (updated) => {
               if (viewAsStudentMode) throw new Error('Vista previa: no se guardan cambios.');

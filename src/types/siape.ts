@@ -331,6 +331,15 @@ export interface StudentConsultationStatus {
   suggestedPriority: PriorityLevel;
   columbiaSiCount?: number | null;
   assigned: boolean;
+  preferredPsychologistId?: string | null;
+  preferredPsychologistName?: string | null;
+}
+
+// Psicólogos que el alumno puede elegir al solicitar consulta (solo nombre y título)
+export interface PsychologistOption {
+  id: string;
+  fullName: string;
+  titleLabel: string | null; // 'Psicóloga' | 'Psicólogo'
 }
 
 // 11. clinical_cases (EXPEDIENTE PSICOLÓGICO ÚNICO POR ESTUDIANTE)
@@ -345,6 +354,8 @@ export interface ClinicalCaseRecord {
   consultationRequested?: boolean;
   consultationRequestedAt?: string | null;
   consultationRequestNote?: string | null;
+  preferredPsychologistId?: string | null; // Preferencia del alumno (no es una asignación)
+  preferredPsychologistName?: string | null;
   // Indicadores independientes vinculados a cada instrumento y su versión
   anxietyIndicator: {
     lastAssessmentId: string | null;

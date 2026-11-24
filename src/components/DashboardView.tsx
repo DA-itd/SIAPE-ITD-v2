@@ -406,6 +406,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       {' · '}expediente{' '}
                       <span className="font-mono">{clinicalCase.caseFolio ?? clinicalCase.id}</span>
                     </div>
+                    {clinicalCase.preferredPsychologistName && (
+                      <div className="text-[11px] text-[#4A6B53] mt-0.5">
+                        Prefiere atenderse con <strong>{clinicalCase.preferredPsychologistName}</strong>
+                      </div>
+                    )}
                     {clinicalCase.consultationRequestNote && (
                       <p className="mt-2 text-xs text-rose-950 bg-rose-50 border border-rose-100 rounded-lg p-2.5 leading-relaxed whitespace-pre-wrap break-words">
                         “{clinicalCase.consultationRequestNote}”
@@ -1064,6 +1069,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           {clinicalCase.consultationRequested && (
                             <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 text-[10px] font-bold">
                               <HeartHandshake className="w-3 h-3" /> Solicitó consulta
+                            </div>
+                          )}
+                          {clinicalCase.preferredPsychologistName && (
+                            <div className="mt-1 text-[10px] text-[#4A6B53]">
+                              Prefiere: {clinicalCase.preferredPsychologistName}
                             </div>
                           )}
                         </td>

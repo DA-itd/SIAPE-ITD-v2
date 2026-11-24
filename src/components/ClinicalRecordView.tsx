@@ -625,6 +625,9 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
                 {clinicalCase.assignedPsychologistName
                   ? `Responsable actual: ${clinicalCase.assignedPsychologistName}.`
                   : 'Aún no tiene psicólogo responsable asignado.'}
+                {clinicalCase.preferredPsychologistName
+                  ? ` El alumno prefiere atenderse con ${clinicalCase.preferredPsychologistName}.`
+                  : ''}
               </p>
               <div className="flex flex-wrap items-center gap-2 mt-2">
                 <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${

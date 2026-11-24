@@ -22,10 +22,12 @@ import {
   ClinicalCaseRecord,
   InstrumentCode,
   PriorityLevel,
+  PsychologistOption,
   StudentConsultationStatus,
   StudentRecord,
   UserProfile,
 } from '../types/siape';
+import { useConsentReview } from './ConsentGate';
 import { INITIAL_INSTRUMENT_CONFIGS } from '../lib/scoringEngine';
 
 // Función para generar una nota musical relajante (Acorde de Do Mayor)
@@ -308,11 +310,12 @@ interface StudentPortalViewProps {
   programs: AcademicProgram[];
   assessments: AssessmentRecord[];
   consultationStatus?: StudentConsultationStatus | null;
+  psychologistOptions?: PsychologistOption[];
   clinicalCase?: ClinicalCaseRecord;
   onUpdateStudentRecord: (updated: StudentRecord) => Promise<void>;
   onSubmitAssessment: (instrumentCode: InstrumentCode, responses: Record<number, number>) => Promise<void>;
   onSubmitColumbia: (responses: Record<number, number>) => Promise<void>;
-  onRequestConsultation: (note?: string) => Promise<void>;
+  onRequestConsultation: (note?: string, preferredPsychologistId?: string | null) => Promise<void>;
   onLogoutOrSwitchRole?: () => void;
 }
 
@@ -322,6 +325,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   programs,
   assessments,
   consultationStatus,
+  psychologistOptions = [],
   clinicalCase,
   onUpdateStudentRecord,
   onSubmitAssessment,
@@ -329,6 +333,8 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   onRequestConsultation,
   onLogoutOrSwitchRole,
 }) => {
+  const consent = useConsentReview();
+
   // ¿La carrera actual ya está en el catálogo institucional?
   const hasCatalogProgram = useMemo(
     () =>
@@ -384,6 +390,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
   // Estados para la solicitud de consulta
   const [consultationModalOpen, setConsultationModalOpen] = useState<boolean>(false);
   const [consultationNote, setConsultationNote] = useState<string>('');
+  const [consultationPsychologist, setConsultationPsychologist] = useState<string>('');
   const [consultationSending, setConsultationSending] = useState<boolean>(false);
   const [consultationError, setConsultationError] = useState<string | null>(null);
   const [consultationDone, setConsultationDone] = useState<boolean>(false);
@@ -458,6 +465,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     setConsultationError(null);
     setConsultationDone(false);
     setConsultationNote(consultationStatus?.note ?? '');
+    setConsultationPsychologist(consultationStatus?.preferredPsychologistId ?? '');
     setConsultationModalOpen(true);
   };
 
@@ -465,7 +473,7 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
     setConsultationSending(true);
     setConsultationError(null);
     try {
-      await onRequestConsultation(consultationNote);
+      await onRequestConsultation(consultationNote, consultationPsychologist || null);
       setConsultationDone(true);
     } catch (err: any) {
       setConsultationError(err?.message || 'No se pudo enviar tu solicitud. Inténtalo de nuevo.');
@@ -642,7 +650,14 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
         <div className="bg-[#F4F0E6] border-b border-[#E8E2D5] px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-[#4A6B53]">
           <div className="flex items-center gap-2">
             <Lock className="w-4 h-4 text-[#4A6B53] shrink-0" />
-            <span><strong>Confidencialidad:</strong> Tus respuestas solo las ve Psicología ITD.</span>
+            <span>
+              <strong>Confidencialidad:</strong> Tus respuestas las ve únicamente Psicología ITD, dentro de los límites del consentimiento.
+              {consent && (
+                <button type="button" onClick={consent.openReview} className="ml-1 underline font-bold cursor-pointer">
+                  Ver encuadre y consentimiento
+                </button>
+              )}
+            </span>
           </div>
           {onLogoutOrSwitchRole && (
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
@@ -1145,6 +1160,29 @@ export const StudentPortalView: React.FC<StudentPortalViewProps> = ({
                   <strong>Tu solicitud es confidencial.</strong> Solo la verá el personal de Psicología.
                   Un psicólogo revisará tu caso y se pondrá en contacto contigo.
                 </div>
+                {psychologistOptions.length > 0 && (
+                  <div>
+                    <label htmlFor="consulta-psicologo" className="block text-xs font-semibold text-[#3B4A3F] mb-1">
+                      ¿Con quién prefieres atenderte?
+                    </label>
+                    <select
+                      id="consulta-psicologo"
+                      value={consultationPsychologist}
+                      onChange={(e) => setConsultationPsychologist(e.target.value)}
+                      className="w-full px-3 py-2.5 text-xs border border-[#E8E2D5] rounded-xl bg-[#FDFBF7] text-[#3B4A3F] focus:outline-none focus:ring-2 focus:ring-[#A3C9A8]"
+                    >
+                      <option value="">Cualquier psicólogo(a) disponible</option>
+                      {psychologistOptions.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.titleLabel ? `${p.fullName} (${p.titleLabel.toLowerCase()})` : p.fullName}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-[10px] text-[#4A6B53] leading-relaxed">
+                      Haremos lo posible por respetar tu preferencia. Si necesitas atención pronto, te atenderá quien esté disponible.
+                    </p>
+                  </div>
+                )}
                 <div>
                   <label className="block text-xs font-semibold text-[#3B4A3F] mb-1">
                     ¿Quieres contarnos algo antes de que te contactemos? (opcional)
