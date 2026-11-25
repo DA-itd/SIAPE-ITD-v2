@@ -1908,10 +1908,7 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
                           className="px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <option value="">Sin Practicante Asignado</option>
-                          {(currentUser.role === RoleCode.PSICOLOGO
-                            ? users.filter((u) => u.role === RoleCode.PRACTICANTE && u.supervisorId === currentUser.id)
-                            : users.filter((u) => u.role === RoleCode.PRACTICANTE)
-                          ).map((intern) => (
+                          {interns.map((intern) => (
                             <option key={intern.id} value={intern.id}>
                               Practicante: {intern.fullName}
                             </option>
@@ -2170,7 +2167,10 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {users.map((u) => (
+                {(currentUser.role === RoleCode.PSICOLOGO
+                  ? users.filter((u) => u.role !== RoleCode.PRACTICANTE || u.supervisorId === currentUser.id)
+                  : users
+                ).map((u) => (
                   <tr key={u.id} className="hover:bg-slate-50/80">
                     <td className="py-3 px-3">
                       <div className="font-bold text-slate-900">{u.fullName}</div>

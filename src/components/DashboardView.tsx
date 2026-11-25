@@ -179,6 +179,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     (row) => !row.clinicalCase.consultationRequested
   );
 
+  // Casos que el usuario tiene a su cargo (como psicólogo o como practicante) y que no
+  // pidieron consulta. Los que sí la pidieron ya aparecen en "Solicitudes de consulta".
+  // Sin esta lista, un caso tomado desaparecía del panel al dejar de estar "sin psicólogo".
+  const myAssignedCasesWithoutRequest = useMemo(() => {
+    return authorizedCases
+      .filter(
+        (c) =>
+          !c.consultationRequested &&
+          (c.assignedPsychologistId === currentUser.id || c.assignedInternId === currentUser.id)
+      )
+      .map((clinicalCase) => ({
+        clinicalCase,
+        student: students.find((s) => s.id === clinicalCase.studentId),
+      }))
+      .filter((row): row is { clinicalCase: ClinicalCaseRecord; student: StudentRecord } => Boolean(row.student))
+      .sort(
+        (a, b) =>
+          PRIORITY_RANK[b.clinicalCase.operationalPriority] - PRIORITY_RANK[a.clinicalCase.operationalPriority] ||
+          (b.clinicalCase.openedAt || '').localeCompare(a.clinicalCase.openedAt || '')
+      );
+  }, [authorizedCases, students, currentUser.id]);
+
   const handleClaim = async (caseId: string) => {
     if (!onClaimCase) return;
     setClaimingCaseId(caseId);
@@ -600,6 +622,71 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {unassignedCasesWithoutRequest.length > 6 && (
             <div className="mt-2 text-[11px] text-[#4A6B53]">
               Se muestran los 6 más recientes. Los demás están en la tabla de expedientes.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* MIS CASOS: expedientes a cargo del usuario que no pidieron consulta */}
+      {canViewNominalClinicalCases && myAssignedCasesWithoutRequest.length > 0 && (
+        <div className="bg-white border-2 border-[#E8E2D5] rounded-2xl p-5 shadow-sm">
+          <div className="flex items-start gap-3.5">
+            <div className="p-2.5 rounded-xl bg-[#A3C9A8]/30 text-[#4A6B53] shrink-0 mt-0.5">
+              <UserCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-[#4A6B53]">Mis casos</div>
+              <h2 className="text-base font-bold text-[#2F3E32] mt-0.5">
+                {myAssignedCasesWithoutRequest.length} caso(s) a tu cargo
+              </h2>
+              <p className="text-xs text-[#4A6B53] mt-1 leading-relaxed">
+                Aquí quedan los expedientes que tomaste o que te asignaron y que no tienen una solicitud de consulta.
+                Abre el expediente para dar seguimiento o asignar a un practicante.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 divide-y divide-[#E8E2D5] border border-[#E8E2D5] rounded-xl overflow-hidden">
+            {myAssignedCasesWithoutRequest.slice(0, 10).map(({ clinicalCase, student }) => (
+              <div key={clinicalCase.id} className="p-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-[#FDFBF7]">
+                <div className="min-w-0">
+                  <div className="font-bold text-sm text-[#2F3E32] truncate">{student.fullName}</div>
+                  <div className="text-xs text-[#4A6B53]">
+                    Mat. <span className="font-mono">{student.matricula}</span> · {student.programName}
+                    {student.semester ? ` · ${student.semester}° Sem` : ''}
+                  </div>
+                  <div className="text-[11px] text-[#4A6B53] mt-0.5">
+                    Expediente <span className="font-mono">{clinicalCase.caseFolio ?? clinicalCase.id}</span> · BAI:{' '}
+                    {clinicalCase.anxietyIndicator.score ?? '—'} · BDI: {clinicalCase.depressionIndicator.score ?? '—'}
+                  </div>
+                  <div className="text-[11px] text-[#4A6B53] mt-0.5">
+                    Responsable: {clinicalCase.assignedPsychologistName ?? 'sin asignar'} · Practicante:{' '}
+                    {clinicalCase.assignedInternName ?? 'sin practicante'}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {clinicalCase.operationalPriority === PriorityLevel.ROJO && (
+                    <span className="px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 text-[11px] font-bold">ROJO</span>
+                  )}
+                  {clinicalCase.operationalPriority === PriorityLevel.AMARILLO && (
+                    <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 text-[11px] font-bold">AMARILLO</span>
+                  )}
+                  {clinicalCase.operationalPriority === PriorityLevel.VERDE && (
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[11px] font-bold">VERDE</span>
+                  )}
+                  <button
+                    onClick={() => onOpenClinicalCase(clinicalCase.id)}
+                    className="px-3 py-1.5 text-xs font-bold text-white bg-[#4A6B53] hover:bg-[#3B5743] rounded-lg cursor-pointer whitespace-nowrap transition-colors"
+                  >
+                    Abrir expediente
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {myAssignedCasesWithoutRequest.length > 10 && (
+            <div className="mt-2 text-[11px] text-[#4A6B53]">
+              Se muestran los 10 de mayor prioridad. Los demás están en Expediente Psicológico Único.
             </div>
           )}
         </div>

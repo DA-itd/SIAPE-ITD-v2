@@ -186,8 +186,9 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
     (currentUser.role === RoleCode.ADMINISTRADOR ||
       currentUser.role === RoleCode.RESPONSABLE_PSICOLOGIA ||
       (currentUser.role === RoleCode.PSICOLOGO && clinicalCase.assignedPsychologistId === currentUser.id));
-  const assignableInterns =
-    currentUser.role === RoleCode.PSICOLOGO ? interns.filter((i) => i.supervisorId === currentUser.id) : interns;
+  // Todos los psicólogos pueden elegir a cualquier practicante activo. El supervisor
+  // registrado al darlo de alta (quien lo creó) no cambia.
+  const assignableInterns = interns;
 
   const handleInternChange = async (internId: string) => {
     setInternSaving(true);
@@ -804,7 +805,7 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
                         </select>
                       ) : (
                         <p className="text-[11px] text-slate-500">
-                          No tienes practicantes a tu cargo. Se dan de alta en Usuarios y Accesos.
+                          No hay practicantes activos registrados. Se dan de alta en Usuarios y Accesos.
                         </p>
                       )}
                       {internSaving && <p className="text-[11px] text-slate-500">Guardando…</p>}
