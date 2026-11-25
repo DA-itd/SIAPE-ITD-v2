@@ -97,6 +97,7 @@ interface ModulesViewProps {
     psychologistId?: string | null,
     internId?: string | null
   ) => void;
+  onAssignIntern: (caseId: string, internId: string | null) => Promise<void>;
   onCreateUserProfile: (payload: {
     fullName: string;
     email: string;
@@ -143,6 +144,7 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
   onRegisterStudentAndSingleCase,
   onCompleteFollowUpTask,
   onAssignCaseResponsible,
+  onAssignIntern,
   onCreateUserProfile,
   onUpdateUserAccountStatus,
   onDeleteUser,
@@ -1894,10 +1896,16 @@ export const ModulesView: React.FC<ModulesViewProps> = ({
 
                         <select
                           value={c.assignedInternId || ''}
-                          onChange={(e) =>
-                            onAssignCaseResponsible(c.id, c.assignedPsychologistId, e.target.value || null)
-                          }
-                          className="px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white text-xs"
+                          disabled={!c.assignedPsychologistId}
+                          title={!c.assignedPsychologistId ? 'Primero el caso debe tener un psicólogo responsable' : undefined}
+                          onChange={async (e) => {
+                            try {
+                              await onAssignIntern(c.id, e.target.value || null);
+                            } catch (err: any) {
+                              window.alert(err?.message || 'No se pudo asignar al practicante.');
+                            }
+                          }}
+                          className="px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <option value="">Sin Practicante Asignado</option>
                           {(currentUser.role === RoleCode.PSICOLOGO

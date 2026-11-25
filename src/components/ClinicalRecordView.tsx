@@ -99,6 +99,7 @@ interface ClinicalRecordViewProps {
     note?: string
   ) => Promise<void>;
   onReleaseCase: (caseId: string, note?: string) => Promise<void>;
+  onAssignIntern: (caseId: string, internId: string | null) => Promise<void>;
 }
 
 export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
@@ -118,6 +119,7 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
   onManualPriorityElevation,
   onTransferCase,
   onReleaseCase,
+  onAssignIntern,
 }) => {
   // Verificación RLS de acceso al expediente y a las notas clínicas
   const myInternIds = interns.filter((i) => i.supervisorId === currentUser.id).map((i) => i.id);
@@ -175,6 +177,29 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
   const [transferNote, setTransferNote] = useState<string>('');
   const [transferSaving, setTransferSaving] = useState<boolean>(false);
   const [transferError, setTransferError] = useState<string | null>(null);
+
+  // Asignación de practicante (solo el psicólogo responsable, la Responsable de Psicología o el administrador)
+  const [internSaving, setInternSaving] = useState<boolean>(false);
+  const [internError, setInternError] = useState<string | null>(null);
+  const canAssignIntern =
+    Boolean(clinicalCase.assignedPsychologistId) &&
+    (currentUser.role === RoleCode.ADMINISTRADOR ||
+      currentUser.role === RoleCode.RESPONSABLE_PSICOLOGIA ||
+      (currentUser.role === RoleCode.PSICOLOGO && clinicalCase.assignedPsychologistId === currentUser.id));
+  const assignableInterns =
+    currentUser.role === RoleCode.PSICOLOGO ? interns.filter((i) => i.supervisorId === currentUser.id) : interns;
+
+  const handleInternChange = async (internId: string) => {
+    setInternSaving(true);
+    setInternError(null);
+    try {
+      await onAssignIntern(clinicalCase.id, internId || null);
+    } catch (err: any) {
+      setInternError(err?.message || 'No se pudo asignar al practicante.');
+    } finally {
+      setInternSaving(false);
+    }
+  };
 
   const openTransferModal = () => {
     setTransferMode('TRANSFER');
@@ -760,6 +785,32 @@ export const ClinicalRecordView: React.FC<ClinicalRecordViewProps> = ({
                   <div className="font-bold text-slate-900 mt-0.5">
                     {clinicalCase.assignedInternName || 'Ninguno asignado a este expediente'}
                   </div>
+                  {canAssignIntern && (
+                    <div className="mt-2 space-y-1">
+                      {assignableInterns.length > 0 ? (
+                        <select
+                          value={clinicalCase.assignedInternId || ''}
+                          disabled={internSaving}
+                          onChange={(e) => handleInternChange(e.target.value)}
+                          aria-label="Asignar practicante a este expediente"
+                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white text-xs disabled:opacity-50"
+                        >
+                          <option value="">Sin practicante asignado</option>
+                          {assignableInterns.map((intern) => (
+                            <option key={intern.id} value={intern.id}>
+                              {intern.fullName}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="text-[11px] text-slate-500">
+                          No tienes practicantes a tu cargo. Se dan de alta en Usuarios y Accesos.
+                        </p>
+                      )}
+                      {internSaving && <p className="text-[11px] text-slate-500">Guardando…</p>}
+                      {internError && <p className="text-[11px] text-rose-700">{internError}</p>}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
